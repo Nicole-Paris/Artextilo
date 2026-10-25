@@ -3,9 +3,11 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Menu,
+  Contact,
   Scissors,
   ShieldCheck,
   Store,
+  Users,
   X,
 } from 'lucide-react';
 import { cn } from '../lib/cn.js';
@@ -13,12 +15,16 @@ import { useDialogFocus } from '../hooks/useDialogFocus.js';
 
 const navigation = [
   { to: '/', label: 'Inicio', icon: LayoutDashboard, end: true },
+  { to: '/clientes', label: 'Clientes', icon: Contact },
+  { to: '/empleados', label: 'Empleados', icon: Users },
   { to: '/sucursales', label: 'Sucursales', icon: Store },
   { to: '/roles', label: 'Roles', icon: ShieldCheck },
 ];
 
 const routeTitles = {
   '/': 'Inicio',
+  '/clientes': 'Clientes',
+  '/empleados': 'Empleados',
   '/sucursales': 'Sucursales',
   '/roles': 'Roles',
 };
