@@ -9,6 +9,8 @@ import {
   Store,
   Users,
   X,
+  Tag,
+  Package,
 } from 'lucide-react';
 import { cn } from '../lib/cn.js';
 import { useDialogFocus } from '../hooks/useDialogFocus.js';
@@ -19,6 +21,8 @@ const navigation = [
   { to: '/empleados', label: 'Empleados', icon: Users },
   { to: '/sucursales', label: 'Sucursales', icon: Store },
   { to: '/roles', label: 'Roles', icon: ShieldCheck },
+  { to: '/categorias', label: 'Categorías', icon: Tag },
+  { to: '/productos', label: 'Productos', icon: Package },
 ];
 
 const routeTitles = {
@@ -27,6 +31,8 @@ const routeTitles = {
   '/empleados': 'Empleados',
   '/sucursales': 'Sucursales',
   '/roles': 'Roles',
+  '/categorias': 'Categorías de Productos',
+  '/productos': 'Catálogo de Productos',
 };
 
 function SidebarContent({ onNavigate }) {

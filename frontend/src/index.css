@@ -4,25 +4,28 @@
   --font-sans: "Manrope Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-display: "Fraunces Variable", Georgia, "Times New Roman", serif;
 
-  --color-cream: #f6f1e7;
-  --color-paper: #fffcf6;
-  --color-ink: #1e2a24;
-  --color-forest: #21463a;
-  --color-forest-strong: #17362c;
-  --color-moss: #5b7a5f;
-  --color-clay: #a94f32;
-  --color-clay-strong: #8f3f27;
-  --color-ochre: #8a5a12;
-  --color-ochre-bright: #c08a2e;
-  --color-line: #e2d6c4;
-  --color-muted: #6f665b;
-  --color-muted-strong: #5a5248;
-  --color-sand: #efe6d8;
-  --color-sage: #e7ede4;
-  --color-danger: #a33a2b;
-  --color-danger-strong: #862f23;
+  /* Nueva paleta de colores oficial Artextilo */
+  --color-cream: #FFFFFF;
+  --color-paper: #FFFFFF;
+  --color-ink: #000000;
+  --color-forest: #000000;
+  --color-forest-strong: #000000;
+  --color-moss: #766E65;
+  --color-clay: #AF9241;
+  --color-clay-strong: #8A7232;
+  --color-ochre: #AF9241;
+  --color-ochre-bright: #AF9241;
+  --color-line: #E5E5E5;
+  --color-muted: #766E65;
+  --color-muted-strong: #766E65;
+  --color-sand: #F9F9F9;
+  --color-sage: #F4F4F4;
+  --color-gold: #AF9241;
+  --color-taupe: #766E65;
+  --color-danger: #A33A2B;
+  --color-danger-strong: #862F23;
 
-  --shadow-soft: 0 1px 2px rgba(30, 42, 36, 0.05), 0 16px 40px -28px rgba(30, 42, 36, 0.45);
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.05), 0 16px 40px -28px rgba(175, 146, 65, 0.25);
 }
 
 @layer base {
@@ -31,7 +34,7 @@
   }
 
   body {
-    @apply bg-cream text-ink antialiased;
+    @apply bg-paper text-ink antialiased;
     font-feature-settings: "ss01" 1, "cv11" 1;
   }
 
@@ -42,18 +45,18 @@
   }
 
   ::selection {
-    background: #e9c9b8;
-    color: #1e2a24;
+    background: #AF9241;
+    color: #FFFFFF;
   }
 
   :where(a, button, input, textarea, select):focus-visible {
-    outline: 2px solid var(--color-clay);
+    outline: 2px solid var(--color-gold);
     outline-offset: 2px;
   }
 
   * {
     scrollbar-width: thin;
-    scrollbar-color: var(--color-line) transparent;
+    scrollbar-color: var(--color-taupe) transparent;
   }
 
   ::-webkit-scrollbar {
@@ -62,8 +65,8 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: var(--color-line);
-    border: 2px solid var(--color-cream);
+    background: var(--color-taupe);
+    border: 2px solid var(--color-paper);
     border-radius: 999px;
   }
 

@@ -9,7 +9,7 @@ services:
       MARIADB_USER: artextilo
       MARIADB_PASSWORD: artextilo
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - artextilo_db_data:/var/lib/mysql
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro

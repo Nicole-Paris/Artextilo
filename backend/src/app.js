@@ -17,6 +17,7 @@ app.use(cors({ origin: allowedOrigins }));
 app.use(express.json({ limit: '2mb' }));
 app.use(morgan('dev'));
 
+// Tus rutas principales de la API (aquí se montan categorías y productos dentro de routes/index.js)
 app.use('/api', routes);
 
 app.use(notFoundHandler);
