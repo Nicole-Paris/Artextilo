@@ -1,32 +1,35 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Tag } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Plus, Edit, Trash2, Tag, Search, RefreshCw } from 'lucide-react';
+import Alert from '../components/Alert.jsx';
+import { categoriasApi } from '../api/categorias.js';
 
 export default function CategoriaPage() {
   const [categorias, setCategorias] = useState([]);
+  const [search, setSearch] = useState('');
   const [form, setForm] = useState({ id_categoria: null, nombre: '', descripcion: '', estado: 'activo' });
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
-  const API_URL = 'http://localhost:4000/api/categorias';
-
-  const fetchCategorias = async () => {
+  const fetchCategorias = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch(API_URL);
-      const data = await res.json();
-      if (data.success) {
-        setCategorias(data.data);
-      }
+      setError('');
+      const res = await categoriasApi.list(search);
+      setCategorias(res.data || []);
     } catch (err) {
-      console.error('Error al cargar las categorías', err);
+      console.error('Error al cargar las categorías:', err);
+      setError(err.message || 'Error al conectar con el servidor.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [search]);
 
   useEffect(() => {
     fetchCategorias();
-  }, []);
+  }, [fetchCategorias]);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -34,45 +37,62 @@ export default function CategoriaPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!form.nombre.trim()) {
+      setError('El nombre de la categoría es obligatorio.');
+      return;
+    }
+
     try {
-      const method = isEditing ? 'PUT' : 'POST';
-      const url = isEditing ? `${API_URL}/${form.id_categoria}` : API_URL;
+      setSaving(true);
+      setError('');
+      setSuccess('');
 
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
+      const payload = {
+        nombre: form.nombre.trim(),
+        descripcion: form.descripcion?.trim() || null,
+        estado: form.estado || 'activo',
+      };
 
-      const data = await res.json();
-      if (data.success) {
-        fetchCategorias();
-        resetForm();
+      if (isEditing) {
+        await categoriasApi.update(form.id_categoria, payload);
+        setSuccess('Categoría actualizada con éxito.');
       } else {
-        alert(data.message);
+        await categoriasApi.create(payload);
+        setSuccess('Categoría creada con éxito.');
       }
+
+      await fetchCategorias();
+      resetForm();
     } catch (err) {
-      alert('Error al guardar la categoría');
+      setError(err.message || 'Error al guardar la categoría.');
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleEdit = (cat) => {
-    setForm(cat);
+    setForm({
+      id_categoria: cat.id_categoria,
+      nombre: cat.nombre,
+      descripcion: cat.descripcion || '',
+      estado: cat.estado,
+    });
     setIsEditing(true);
+    setError('');
+    setSuccess('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm('¿Estás seguro de eliminar esta categoría?')) return;
     try {
-      const res = await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (data.success) {
-        fetchCategorias();
-      } else {
-        alert(data.message);
-      }
+      setError('');
+      setSuccess('');
+      await categoriasApi.remove(id);
+      setSuccess('Categoría eliminada con éxito.');
+      await fetchCategorias();
     } catch (err) {
-      alert('Error al eliminar');
+      setError(err.message || 'Error al eliminar la categoría.');
     }
   };
 
@@ -88,7 +108,38 @@ export default function CategoriaPage() {
           <h1 className="font-display text-2xl font-bold text-ink">Categorías de Productos</h1>
           <p className="text-sm text-muted">Gestiona las clasificaciones del catálogo artesanal</p>
         </div>
+        <div className="relative w-full sm:w-64">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+          <input
+            type="text"
+            placeholder="Buscar categoría..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-xl border border-line bg-white pl-9 pr-4 py-2 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
+          />
+        </div>
       </div>
+
+      {error && (
+        <Alert variant="danger">
+          <div className="flex items-center justify-between">
+            <span>{error}</span>
+            <button
+              type="button"
+              onClick={fetchCategorias}
+              className="inline-flex items-center gap-1 font-semibold underline"
+            >
+              <RefreshCw className="h-3 w-3" /> Reintentar
+            </button>
+          </div>
+        </Alert>
+      )}
+
+      {success && (
+        <Alert variant="success">
+          <span>{success}</span>
+        </Alert>
+      )}
 
       {/* Formulario Estilizado */}
       <div className="rounded-2xl border border-line bg-paper p-6 shadow-soft">
@@ -98,13 +149,14 @@ export default function CategoriaPage() {
         </h2>
         <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">Nombre</label>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">Nombre *</label>
             <input
               type="text"
               name="nombre"
               value={form.nombre}
               onChange={handleChange}
               required
+              maxLength={50}
               placeholder="Ej. Guayaberas"
               className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
             />
@@ -116,6 +168,7 @@ export default function CategoriaPage() {
               name="descripcion"
               value={form.descripcion}
               onChange={handleChange}
+              maxLength={150}
               placeholder="Breve descripción..."
               className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
             />
@@ -137,17 +190,19 @@ export default function CategoriaPage() {
               <button
                 type="button"
                 onClick={resetForm}
-                className="rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-semibold text-muted-strong transition hover:bg-sand"
+                disabled={saving}
+                className="rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-semibold text-muted transition hover:bg-sand"
               >
                 Cancelar
               </button>
             )}
             <button
               type="submit"
-              className="flex items-center gap-2 rounded-xl bg-clay px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-clay-dark"
+              disabled={saving}
+              className="flex items-center gap-2 rounded-xl bg-clay px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-clay/90 disabled:opacity-50"
             >
               <Plus className="h-4 w-4" />
-              {isEditing ? 'Actualizar Categoría' : 'Guardar Categoría'}
+              {saving ? 'Guardando...' : isEditing ? 'Actualizar Categoría' : 'Guardar Categoría'}
             </button>
           </div>
         </form>
@@ -167,10 +222,16 @@ export default function CategoriaPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-line bg-white">
-              {categorias.length === 0 && !loading ? (
+              {loading && categorias.length === 0 ? (
                 <tr>
                   <td colSpan="5" className="px-6 py-8 text-center text-sm text-muted">
-                    No hay categorías registradas.
+                    Cargando categorías...
+                  </td>
+                </tr>
+              ) : categorias.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="px-6 py-8 text-center text-sm text-muted">
+                    No se encontraron categorías registradas.
                   </td>
                 </tr>
               ) : (
@@ -187,10 +248,16 @@ export default function CategoriaPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button onClick={() => handleEdit(cat)} className="text-clay hover:text-clay-dark mr-3 inline-flex items-center gap-1">
+                      <button
+                        onClick={() => handleEdit(cat)}
+                        className="text-clay hover:underline mr-4 inline-flex items-center gap-1"
+                      >
                         <Edit className="h-4 w-4" /> Editar
                       </button>
-                      <button onClick={() => handleDelete(cat.id_categoria)} className="text-red-600 hover:text-red-800 inline-flex items-center gap-1">
+                      <button
+                        onClick={() => handleDelete(cat.id_categoria)}
+                        className="text-red-600 hover:underline inline-flex items-center gap-1"
+                      >
                         <Trash2 className="h-4 w-4" /> Eliminar
                       </button>
                     </td>

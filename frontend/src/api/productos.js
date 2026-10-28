@@ -1,72 +1,50 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
+import { request } from './client.js';
 
+function buildQuery({ search = '', id_categoria = null, genero = null, estado = null } = {}) {
+  const params = new URLSearchParams();
+  if (search) params.set('search', search);
+  if (id_categoria) params.set('id_categoria', String(id_categoria));
+  if (genero) params.set('genero', genero);
+  if (estado) params.set('estado', estado);
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
+
+export const productosApi = {
+  list(filters = {}) {
+    return request(`/productos${buildQuery(filters)}`);
+  },
+
+  get(id) {
+    return request(`/productos/${id}`);
+  },
+
+  create(payload) {
+    return request('/productos', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  update(id, payload) {
+    return request(`/productos/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  remove(id) {
+    return request(`/productos/${id}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
+// Compatibilidad con código previo
 export const productoService = {
-  async listar() {
-    try {
-      const response = await fetch(`${API_URL}/productos`);
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Error al listar productos:', error);
-      throw error;
-    }
-  },
-
-  async obtenerPorId(id) {
-    try {
-      const response = await fetch(`${API_URL}/productos/${id}`);
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error(`Error al obtener el producto con id ${id}:`, error);
-      throw error;
-    }
-  },
-
-  async crear(productoData) {
-    try {
-      const response = await fetch(`${API_URL}/productos`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(productoData),
-      });
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Error al crear producto:', error);
-      throw error;
-    }
-  },
-
-  async actualizar(id, productoData) {
-    try {
-      const response = await fetch(`${API_URL}/productos/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(productoData),
-      });
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error(`Error al actualizar el producto con id ${id}:`, error);
-      throw error;
-    }
-  },
-
-  async eliminar(id) {
-    try {
-      const response = await fetch(`${API_URL}/productos/${id}`, {
-        method: 'DELETE',
-      });
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error(`Error al eliminar el producto con id ${id}:`, error);
-      throw error;
-    }
-  }
+  listar: (filters) => productosApi.list(filters),
+  obtenerPorId: (id) => productosApi.get(id),
+  crear: (payload) => productosApi.create(payload),
+  actualizar: (id, payload) => productosApi.update(id, payload),
+  eliminar: (id) => productosApi.remove(id),
 };
