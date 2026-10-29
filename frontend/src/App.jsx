@@ -4,6 +4,7 @@ import Layout from './components/Layout.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import ClientesPage from './pages/ClientesPage.jsx';
 import EmpleadosPage from './pages/EmpleadosPage.jsx';
+import InventarioPage from './pages/InventarioPage.jsx';
 import NotFound from './pages/NotFound.jsx';
 import RolesPage from './pages/RolesPage.jsx';
 import SucursalesPage from './pages/SucursalesPage.jsx';
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="roles" element={<RolesPage />} />
         <Route path="categorias" element={<CategoriaPage />} />
         <Route path="productos" element={<ProductosPage />} />
+        <Route path="inventario" element={<InventarioPage />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>
