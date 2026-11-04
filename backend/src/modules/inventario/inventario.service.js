@@ -18,6 +18,7 @@ const BASE_INVENTARIO_SELECT = `
     p.talla AS producto_talla,
     p.precio_unitario AS producto_precio,
     p.costo_compra AS producto_costo,
+    p.estado AS producto_estado,
     c.id_categoria,
     c.nombre AS categoria_nombre,
     s.nombre AS sucursal_nombre,

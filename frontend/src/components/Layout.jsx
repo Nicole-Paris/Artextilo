@@ -12,6 +12,8 @@ import {
   Tag,
   Package,
   Boxes,
+  Receipt,
+  Wallet,
 } from 'lucide-react';
 import { cn } from '../lib/cn.js';
 import { useDialogFocus } from '../hooks/useDialogFocus.js';
@@ -25,6 +27,8 @@ const navigation = [
   { to: '/categorias', label: 'Categorías', icon: Tag },
   { to: '/productos', label: 'Productos', icon: Package },
   { to: '/inventario', label: 'Inventario', icon: Boxes },
+  { to: '/caja', label: 'Corte de caja', icon: Wallet },
+  { to: '/pedidos', label: 'Pedidos', icon: Receipt },
 ];
 
 const routeTitles = {
@@ -36,6 +40,8 @@ const routeTitles = {
   '/categorias': 'Categorías de Productos',
   '/productos': 'Catálogo de Productos',
   '/inventario': 'Control de Inventario y Movimientos',
+  '/caja': 'Corte de Caja',
+  '/pedidos': 'Pedidos y Pagos',
 };
 
 function SidebarContent({ onNavigate }) {
