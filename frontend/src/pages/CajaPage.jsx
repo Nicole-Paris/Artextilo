@@ -4,7 +4,6 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Banknote,
-  CheckCircle2,
   Clock,
   History,
   Landmark,
@@ -373,12 +372,7 @@ export default function CajaPage() {
 
       {success && (
         <div className="mb-5">
-          <Alert type="success">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-              <span>{success}</span>
-            </div>
-          </Alert>
+          <Alert type="success">{success}</Alert>
         </div>
       )}
 

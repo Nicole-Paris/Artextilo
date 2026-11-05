@@ -407,7 +407,7 @@ export async function getPedido(id) {
      INNER JOIN empleado e ON e.id_empleado = pg.id_empleado
      INNER JOIN corte_caja cc ON cc.id_corte_caja = pg.id_corte_caja
      WHERE pg.id_pedido = ? AND pg.deleted_at IS NULL
-     ORDER BY pg.fecha_hora DESC, pg.id_pago DESC`,
+     ORDER BY pg.fecha_hora ASC, pg.id_pago ASC`,
     [id],
   );
 
@@ -717,6 +717,10 @@ export async function createPedido(payload, userId = null) {
     const montoInicial = Number(pago_inicial?.monto || 0);
 
     if (montoInicial > 0) {
+      if (pago_inicial.metodo_pago === 'credito' && condicion_pago !== 'credito') {
+        throw ApiError.badRequest('Solo los pedidos a crédito pueden pagarse con crédito');
+      }
+
       if (montoInicial < anticipoRequerido && montoInicial < total) {
         throw ApiError.badRequest(
           `El anticipo mínimo es ${anticipoRequerido}. Si no vas a cobrar ahora, deja el monto en 0 y regístralo después en Pagos.`,
@@ -794,7 +798,8 @@ export async function addPago(id, payload, userId = null) {
     await connection.beginTransaction();
 
     const [pedidos] = await connection.execute(
-      `SELECT id_pedido, id_empleado, id_sucursal, total, estado, estado_pago
+      `SELECT id_pedido, id_empleado, id_sucursal, total, estado, estado_pago,
+              condicion_pago
        FROM pedido
        WHERE id_pedido = ? AND deleted_at IS NULL
        FOR UPDATE`,
@@ -808,6 +813,10 @@ export async function addPago(id, payload, userId = null) {
     const pedido = pedidos[0];
     if (pedido.estado === 'cancelado') {
       throw ApiError.conflict('No se pueden registrar pagos de un pedido cancelado');
+    }
+
+    if (payload.metodo_pago === 'credito' && pedido.condicion_pago !== 'credito') {
+      throw ApiError.badRequest('Solo los pedidos a crédito pueden pagarse con crédito');
     }
 
     const totalPagado = await getTotalPagado(connection, id);
@@ -824,6 +833,29 @@ export async function addPago(id, payload, userId = null) {
       );
     }
 
+    const concepto =
+      payload.concepto_pago || (monto >= saldoPendiente ? 'liquidacion' : 'abono');
+    if (concepto === 'liquidacion' && monto !== saldoPendiente) {
+      throw ApiError.badRequest(
+        'El concepto liquidación solo aplica cuando el monto es igual al saldo pendiente',
+      );
+    }
+    if (concepto === 'abono' && monto >= saldoPendiente) {
+      throw ApiError.badRequest(
+        'El concepto abono solo aplica cuando el monto es menor al saldo pendiente',
+      );
+    }
+    if (concepto === 'anticipo') {
+      if (totalPagado > 0) {
+        throw ApiError.badRequest('El concepto anticipo solo aplica al primer pago del pedido');
+      }
+      if (monto >= saldoPendiente) {
+        throw ApiError.badRequest(
+          'El anticipo debe ser menor al saldo pendiente del pedido',
+        );
+      }
+    }
+
     const idEmpleadoPago = Number(payload.id_empleado || pedido.id_empleado);
     const empleadoPago = await getEmpleadoActivo(connection, idEmpleadoPago);
 
@@ -834,8 +866,6 @@ export async function addPago(id, payload, userId = null) {
     }
 
     const idCorteCaja = await getOpenCorteId(connection, idEmpleadoPago);
-    const concepto = monto >= saldoPendiente ? 'liquidacion' : 'abono';
-
     await connection.execute(
       `INSERT INTO pago (
          id_pedido,
@@ -885,7 +915,7 @@ export async function changeEstado(id, payload, userId = null) {
     await connection.beginTransaction();
 
     const [pedidos] = await connection.execute(
-      `SELECT id_pedido, estado, id_empleado
+      `SELECT id_pedido, estado, id_empleado, anticipo_requerido, total
        FROM pedido
        WHERE id_pedido = ? AND deleted_at IS NULL
        FOR UPDATE`,
@@ -913,7 +943,25 @@ export async function changeEstado(id, payload, userId = null) {
       );
     }
 
+    if (payload.estado === 'en_proceso') {
+      const totalPagado = await getTotalPagado(connection, id);
+      if (totalPagado < Number(pedido.anticipo_requerido)) {
+        const anticipoRequerido = Number(pedido.anticipo_requerido).toLocaleString('es-MX');
+        throw ApiError.conflict(
+          `El pedido necesita cubrir al menos el anticipo requerido ($${anticipoRequerido}) para pasar a en proceso`,
+        );
+      }
+    }
+
     if (payload.estado === 'entregado') {
+      const totalPagado = await getTotalPagado(connection, id);
+      const saldoPendiente = Number(pedido.total) - totalPagado;
+      if (saldoPendiente > 0) {
+        throw ApiError.conflict(
+          'El pedido tiene saldo pendiente. Registra el pago completo antes de entregarlo',
+        );
+      }
+
       if (!payload.id_empleado_entrega) {
         throw ApiError.badRequest(
           'Debes indicar el empleado que realiza la entrega del pedido',

@@ -232,7 +232,10 @@ export default function PedidosPage() {
     metodo_pago: 'efectivo',
     referencia: '',
     id_empleado: '',
+    concepto_pago: 'anticipo',
   });
+  const [pagoTouched, setPagoTouched] = useState({});
+  const [pagoConceptoTouched, setPagoConceptoTouched] = useState(false);
   const [savingPago, setSavingPago] = useState(false);
 
   const [estadoTarget, setEstadoTarget] = useState(null);
@@ -810,28 +813,65 @@ export default function PedidosPage() {
     setDetail(null);
   }
 
+  function conceptoPagoPorDefecto(pedido, monto) {
+    const saldoPendiente = Number(pedido.saldo_pendiente);
+    if (monto === saldoPendiente) return 'liquidacion';
+    if (Number(pedido.total_pagado) === 0 && monto < saldoPendiente) return 'anticipo';
+    return 'abono';
+  }
+
+  const pagoFieldErrors = {
+    monto:
+      pagoForm.monto === ''
+        ? 'El monto es obligatorio.'
+        : Number(pagoForm.monto) <= 0
+          ? 'El monto debe ser mayor a cero.'
+          : Number(pagoForm.monto) > Number(pagoTarget?.saldo_pendiente)
+            ? 'El monto no puede exceder el saldo pendiente.'
+            : '',
+    referencia:
+      pagoForm.metodo_pago === 'transferencia' && !pagoForm.referencia.trim()
+        ? 'La referencia es obligatoria para pagos por transferencia.'
+        : '',
+    id_empleado: pagoForm.id_empleado ? '' : 'Selecciona un empleado.',
+  };
+  const montoPagoActual = Number(pagoForm.monto);
+  const saldoPendientePago = Number(pagoTarget?.saldo_pendiente);
+  const pagoSaldoHint =
+    montoPagoActual > 0 && montoPagoActual < saldoPendientePago
+      ? `Faltan ${formatMoney(saldoPendientePago - montoPagoActual)} para cubrir el total`
+      : montoPagoActual === saldoPendientePago && montoPagoActual > 0
+        ? 'Con este pago el pedido queda liquidado'
+        : undefined;
+  const visiblePagoFieldErrors = Object.fromEntries(
+    Object.entries(pagoFieldErrors).filter(
+      ([field, message]) => message && pagoTouched[field],
+    ),
+  );
+  const pagoFormInvalid = Object.values(pagoFieldErrors).some(Boolean);
+
   function abrirPago(pedido) {
     setError('');
     setPagoTarget(pedido);
+    setPagoCaja(null);
+    const monto = String(pedido.saldo_pendiente || '');
     setPagoForm({
-      monto: String(pedido.saldo_pendiente || ''),
+      monto,
       metodo_pago: 'efectivo',
       referencia: '',
       id_empleado: String(pedido.id_empleado),
+      concepto_pago: conceptoPagoPorDefecto(pedido, Number(monto)),
     });
+    setPagoTouched({});
+    setPagoConceptoTouched(false);
   }
 
   async function handleRegistrarPago(event) {
     event.preventDefault();
 
     const monto = Number(pagoForm.monto);
-    if (!Number.isFinite(monto) || monto <= 0) {
-      setError('Captura un monto válido.');
-      return;
-    }
-
-    if (monto > Number(pagoTarget.saldo_pendiente)) {
-      setError('El monto no puede exceder el saldo pendiente.');
+    if (Object.values(pagoFieldErrors).some(Boolean)) {
+      setPagoTouched({ monto: true, referencia: true, id_empleado: true });
       return;
     }
 
@@ -842,8 +882,12 @@ export default function PedidosPage() {
       await pedidosApi.addPago(pagoTarget.id_pedido, {
         monto,
         metodo_pago: pagoForm.metodo_pago,
-        referencia: pagoForm.referencia.trim() || null,
+        referencia:
+          pagoForm.metodo_pago === 'transferencia'
+            ? pagoForm.referencia.trim()
+            : null,
         id_empleado: Number(pagoForm.id_empleado || pagoTarget.id_empleado),
+        concepto_pago: pagoForm.concepto_pago,
       });
       setSuccess('Pago registrado correctamente.');
       setPagoTarget(null);
@@ -991,12 +1035,7 @@ export default function PedidosPage() {
 
       {success && (
         <div className="mb-5">
-          <Alert type="success">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-              <span>{success}</span>
-            </div>
-          </Alert>
+          <Alert type="success">{success}</Alert>
         </div>
       )}
 
@@ -1188,9 +1227,10 @@ export default function PedidosPage() {
                             <Button
                               variant="secondary"
                               size="sm"
+                              className="whitespace-nowrap"
                               onClick={() => abrirPago(pedido)}
                             >
-                              Cobrar
+                              Registrar pago
                             </Button>
                           )}
                           {puedeCambiarEstado(pedido) && (
@@ -1259,7 +1299,7 @@ export default function PedidosPage() {
                     </Button>
                     {puedeCobrar(pedido) && (
                       <Button size="sm" onClick={() => abrirPago(pedido)}>
-                        Cobrar
+                          Registrar pago
                       </Button>
                     )}
                     {puedeCambiarEstado(pedido) && (
@@ -2152,7 +2192,12 @@ export default function PedidosPage() {
             >
               Cancelar
             </Button>
-            <Button type="submit" form="form-pago-pedido" loading={savingPago}>
+            <Button
+              type="submit"
+              form="form-pago-pedido"
+              loading={savingPago}
+              disabled={!pagoCaja || pagoFormInvalid || savingPago}
+            >
               Registrar pago
             </Button>
           </>
@@ -2184,18 +2229,29 @@ export default function PedidosPage() {
               </Alert>
             )}
 
-            <Field label="Monto" htmlFor="pago-monto">
+            <Field
+              label="Monto"
+              htmlFor="pago-monto"
+              error={visiblePagoFieldErrors.monto}
+              hint={pagoSaldoHint}
+            >
               <input
                 id="pago-monto"
-                type="number"
-                min="1"
-                step="1"
-                className={inputClass()}
+                type="text"
+                inputMode="numeric"
+                className={inputClass(visiblePagoFieldErrors.monto)}
                 value={pagoForm.monto}
-                onChange={(event) =>
-                  setPagoForm((current) => ({ ...current, monto: event.target.value }))
-                }
-                required
+                onChange={(event) => {
+                  const monto = event.target.value.replace(/\D/g, '');
+                  setPagoForm((current) => ({
+                    ...current,
+                    monto,
+                    ...(!pagoConceptoTouched && pagoTarget
+                      ? { concepto_pago: conceptoPagoPorDefecto(pagoTarget, Number(monto)) }
+                      : {}),
+                  }));
+                }}
+                onBlur={() => setPagoTouched((current) => ({ ...current, monto: true }))}
               />
             </Field>
 
@@ -2208,43 +2264,84 @@ export default function PedidosPage() {
                   setPagoForm((current) => ({
                     ...current,
                     metodo_pago: event.target.value,
+                    ...(event.target.value === 'credito' ? { referencia: '' } : {}),
                   }))
                 }
               >
                 <option value="efectivo">Efectivo</option>
                 <option value="transferencia">Transferencia</option>
+                {pagoTarget.condicion_pago === 'credito' && (
+                  <option value="credito">Crédito</option>
+                )}
               </select>
             </Field>
 
-            <Field label="Referencia" htmlFor="pago-referencia">
-              <input
-                id="pago-referencia"
-                type="text"
-                maxLength={50}
+            {pagoForm.metodo_pago !== 'credito' && (
+              <Field
+                label="Referencia"
+                htmlFor="pago-referencia"
+                error={visiblePagoFieldErrors.referencia}
+              >
+                <input
+                  id="pago-referencia"
+                  type="text"
+                  maxLength={50}
+                  className={inputClass(visiblePagoFieldErrors.referencia)}
+                  value={pagoForm.referencia}
+                  onChange={(event) =>
+                    setPagoForm((current) => ({
+                      ...current,
+                      referencia: event.target.value,
+                    }))
+                  }
+                  onBlur={() =>
+                    setPagoTouched((current) => ({ ...current, referencia: true }))
+                  }
+                  placeholder="Folio o referencia de transferencia"
+                />
+              </Field>
+            )}
+
+            <Field label="Concepto" htmlFor="pago-concepto">
+              <select
+                id="pago-concepto"
                 className={inputClass()}
-                value={pagoForm.referencia}
-                onChange={(event) =>
+                value={pagoForm.concepto_pago}
+                onChange={(event) => {
+                  setPagoConceptoTouched(true);
                   setPagoForm((current) => ({
                     ...current,
-                    referencia: event.target.value,
-                  }))
-                }
-                placeholder="Folio o referencia de transferencia"
-              />
+                    concepto_pago: event.target.value,
+                  }));
+                }}
+              >
+                <option value="anticipo">Anticipo</option>
+                <option value="abono">Abono</option>
+                <option value="liquidacion">Liquidación</option>
+              </select>
             </Field>
 
-            <Field label="Empleado que recibe" htmlFor="pago-empleado">
+            <Field
+              label="Empleado que recibe"
+              htmlFor="pago-empleado"
+              error={visiblePagoFieldErrors.id_empleado}
+            >
               <select
                 id="pago-empleado"
-                className={inputClass()}
+                className={inputClass(visiblePagoFieldErrors.id_empleado)}
                 value={pagoForm.id_empleado}
-                onChange={(event) =>
+                onChange={(event) => {
+                  setPagoCaja(null);
                   setPagoForm((current) => ({
                     ...current,
                     id_empleado: event.target.value,
-                  }))
+                  }));
+                }}
+                onBlur={() =>
+                  setPagoTouched((current) => ({ ...current, id_empleado: true }))
                 }
               >
+                <option value="">Selecciona un empleado</option>
                 {empleados.map((empleado) => (
                   <option key={empleado.id_empleado} value={empleado.id_empleado}>
                     {empleado.nombre} {empleado.apellido_paterno}

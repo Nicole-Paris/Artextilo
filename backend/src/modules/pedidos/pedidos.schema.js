@@ -29,16 +29,29 @@ export const pagoPayloadSchema = z.object({
     .number({ error: 'El monto es obligatorio' })
     .int('El monto debe ser un número entero')
     .positive('El monto debe ser mayor a cero'),
-  metodo_pago: z.enum(['efectivo', 'transferencia'], {
-    error: 'El método de pago debe ser efectivo o transferencia',
+  metodo_pago: z.enum(['efectivo', 'transferencia', 'credito'], {
+    error: 'El método de pago debe ser efectivo, transferencia o crédito',
   }),
   referencia: optionalText(50, 'La referencia no puede exceder 50 caracteres'),
+  concepto_pago: z
+    .enum(['anticipo', 'abono', 'liquidacion'], {
+      error: 'El concepto de pago debe ser anticipo, abono o liquidación',
+    })
+    .optional(),
   id_empleado: z.coerce
     .number()
     .int()
     .positive()
     .optional()
     .nullable(),
+}).superRefine((pago, context) => {
+  if (pago.metodo_pago === 'transferencia' && !pago.referencia) {
+    context.addIssue({
+      code: 'custom',
+      path: ['referencia'],
+      message: 'La referencia es obligatoria para pagos por transferencia',
+    });
+  }
 });
 
 const productoPayloadSchema = z.object({
