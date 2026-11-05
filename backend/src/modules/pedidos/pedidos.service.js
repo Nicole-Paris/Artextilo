@@ -1029,10 +1029,20 @@ export async function cancelPedido(id, payload, userId = null) {
 
     const totalPagado = await getTotalPagado(connection, id);
     const montoDevolucion = Number(payload.monto_devolucion || 0);
+    const [devolucionesPrevias] = await connection.execute(
+      `SELECT COALESCE(SUM(monto), 0) AS total_devuelto
+       FROM devolucion
+       WHERE id_pedido = ? AND deleted_at IS NULL`,
+      [id],
+    );
+    const devolvible = Math.max(
+      totalPagado - Number(devolucionesPrevias[0].total_devuelto),
+      0,
+    );
 
-    if (montoDevolucion > totalPagado) {
+    if (montoDevolucion > devolvible) {
       throw ApiError.badRequest(
-        `La devolución no puede exceder lo pagado del pedido (${totalPagado})`,
+        `La devolución no puede exceder lo disponible para devolver del pedido ($${devolvible})`,
       );
     }
 
