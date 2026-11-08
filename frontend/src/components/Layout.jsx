@@ -1,5 +1,13 @@
+
 import { useEffect, useRef, useState } from 'react';
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
+import {
+  Link,
+  NavLink,
+  Outlet,
+  useLocation,
+  useNavigate,
+} from 'react-router-dom';
+
 import {
   LayoutDashboard,
   Menu,
@@ -15,7 +23,9 @@ import {
   Receipt,
   Wallet,
   RotateCcw,
+  LogOut,
 } from 'lucide-react';
+
 import { cn } from '../lib/cn.js';
 import { useDialogFocus } from '../hooks/useDialogFocus.js';
 
@@ -58,18 +68,25 @@ function SidebarContent({ onNavigate }) {
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-clay text-white">
           <Scissors className="h-5 w-5" aria-hidden="true" />
         </div>
+
         <div>
           <p className="font-display text-lg font-semibold leading-tight text-cream">
             Artextilo
           </p>
-          <p className="text-xs text-cream/60">Gestión administrativa</p>
+          <p className="text-xs text-cream/60">
+            Gestión administrativa
+          </p>
         </div>
       </Link>
 
-      <nav className="flex-1 px-3 py-4" aria-label="Navegación principal">
+      <nav
+        className="flex-1 px-3 py-4"
+        aria-label="Navegación principal"
+      >
         <p className="px-3 pb-2 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-cream/45">
           Operación
         </p>
+
         <div className="space-y-1">
           {navigation.map(({ to, label, icon: Icon, end }) => (
             <NavLink
@@ -102,8 +119,33 @@ function SidebarContent({ onNavigate }) {
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [empleado, setEmpleado] = useState(null);
+
   const mobileAsideRef = useRef(null);
+
   const location = useLocation();
+  const navigate = useNavigate();
+
+  // Obtener los datos del empleado que inició sesión.
+  useEffect(() => {
+    try {
+      const datos = localStorage.getItem('artextilo_empleado');
+
+      setEmpleado(datos ? JSON.parse(datos) : null);
+    } catch {
+      localStorage.removeItem('artextilo_empleado');
+      setEmpleado(null);
+      navigate('/login', { replace: true });
+    }
+  }, [navigate]);
+
+  // Cerrar sesión.
+  function handleLogout() {
+    localStorage.removeItem('artextilo_empleado');
+    setEmpleado(null);
+
+    navigate('/login', { replace: true });
+  }
 
   useDialogFocus({
     active: sidebarOpen,
@@ -117,9 +159,17 @@ export default function Layout() {
   }, [location.pathname]);
 
   useEffect(() => {
-    const section = routeTitles[location.pathname] ?? 'Página no encontrada';
+    const section =
+      routeTitles[location.pathname] ?? 'Página no encontrada';
+
     document.title = `${section} · Artextilo`;
   }, [location.pathname]);
+
+  const nombreCompleto = empleado
+    ? `${empleado.nombre} ${empleado.apellido_paterno || ''}`.trim()
+    : 'Usuario';
+
+  const inicial = empleado?.nombre?.charAt(0)?.toUpperCase() || 'U';
 
   return (
     <div className="min-h-screen bg-cream">
@@ -130,10 +180,12 @@ export default function Layout() {
         Saltar al contenido
       </a>
 
+      {/* Sidebar escritorio */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col bg-forest lg:flex">
         <SidebarContent />
       </aside>
 
+      {/* Sidebar móvil */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div
@@ -141,6 +193,7 @@ export default function Layout() {
             onClick={() => setSidebarOpen(false)}
             aria-hidden="true"
           />
+
           <aside
             ref={mobileAsideRef}
             id="mobile-navigation"
@@ -159,12 +212,16 @@ export default function Layout() {
             >
               <X className="h-5 w-5" />
             </button>
-            <SidebarContent onNavigate={() => setSidebarOpen(false)} />
+
+            <SidebarContent
+              onNavigate={() => setSidebarOpen(false)}
+            />
           </aside>
         </div>
       )}
 
       <div className="lg:pl-64" data-app-shell>
+        {/* Encabezado */}
         <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-line bg-paper/90 px-4 backdrop-blur lg:px-8">
           <button
             type="button"
@@ -183,14 +240,40 @@ export default function Layout() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2 text-sm text-muted-strong">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sand text-xs font-bold text-clay">
-              AD
+          {/* Información del empleado y cierre de sesión */}
+          <div className="flex items-center gap-3">
+            <div className="hidden text-right sm:block">
+              <p className="max-w-48 truncate text-sm font-semibold text-ink">
+                {nombreCompleto}
+              </p>
+
+              <p className="text-xs text-muted">
+                {empleado?.rol || 'Empleado'}
+              </p>
             </div>
-            <span className="hidden font-medium sm:inline">Administrador</span>
+
+            <div
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sand text-sm font-bold text-clay"
+              aria-label={`Usuario ${nombreCompleto}`}
+            >
+              {inicial}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex h-9 items-center gap-2 rounded-xl border border-line px-3 text-sm font-semibold text-muted-strong transition hover:border-clay hover:bg-sand hover:text-clay focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clay"
+              title="Cerrar sesión"
+            >
+              <LogOut className="h-4 w-4" aria-hidden="true" />
+              <span className="hidden md:inline">
+                Salir
+              </span>
+            </button>
           </div>
         </header>
 
+        {/* Contenido principal */}
         <main
           id="main-content"
           className="mx-auto w-full max-w-[1500px] px-4 py-6 lg:px-8 lg:py-8"
