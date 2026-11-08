@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Manrope Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Fraunces Variable", Georgia, "Times New Roman", serif;
+
+  /* Nueva paleta de colores oficial Artextilo */
+  --color-cream: #FFFFFF;
+  --color-paper: #FFFFFF;
+  --color-ink: #000000;
+  --color-forest: #000000;
+  --color-forest-strong: #000000;
+  --color-moss: #766E65;
+  --color-clay: #AF9241;
+  --color-clay-strong: #8A7232;
+  --color-ochre: #AF9241;
+  --color-ochre-bright: #AF9241;
+  --color-line: #E5E5E5;
+  --color-muted: #766E65;
+  --color-muted-strong: #766E65;
+  --color-sand: #F9F9F9;
+  --color-sage: #F4F4F4;
+  --color-gold: #AF9241;
+  --color-taupe: #766E65;
+  --color-danger: #A33A2B;
+  --color-danger-strong: #862F23;
+
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.05), 0 16px 40px -28px rgba(175, 146, 65, 0.25);
+}
+
+@layer base {
+  html {
+    scrollbar-gutter: stable;
+  }
+
+  body {
+    @apply bg-paper text-ink antialiased;
+    font-feature-settings: "ss01" 1, "cv11" 1;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  ::selection {
+    background: #AF9241;
+    color: #FFFFFF;
+  }
+
+  :where(a, button, input, textarea, select):focus-visible {
+    outline: 2px solid var(--color-gold);
+    outline-offset: 2px;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-taupe) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-taupe);
+    border: 2px solid var(--color-paper);
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+.stitch-line {
+  height: 1px;
+  background-image: repeating-linear-gradient(
+    90deg,
+    currentColor 0 5px,
+    transparent 5px 11px
+  );
+  opacity: 0.35;
+}
