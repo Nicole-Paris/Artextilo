@@ -1,8 +1,8 @@
-
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Scissors, LoaderCircle, LockKeyhole, Mail } from 'lucide-react';
 import { authApi } from '../api/auth.js';
+import RecuperarPasswordModal from '../components/RecuperarPasswordModal.jsx';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -12,10 +12,13 @@ export default function LoginPage() {
   const [mostrarContrasena, setMostrarContrasena] = useState(false);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState('');
+  const [exitoMensaje, setExitoMensaje] = useState('');
+  const [modalRecuperarOpen, setModalRecuperarOpen] = useState(false);
 
   async function handleSubmit(event) {
     event.preventDefault();
     setError('');
+    setExitoMensaje('');
 
     if (!correo.trim() || !contrasena) {
       setError('Ingresa tu correo y contraseña.');
@@ -108,12 +111,27 @@ export default function LoginPage() {
 
             {/* Contraseña */}
             <div>
-              <label
-                htmlFor="contrasena"
-                className="mb-2 block text-sm font-semibold text-black"
-              >
-                Contraseña
-              </label>
+              <div className="mb-2 flex items-center justify-between">
+                <label
+                  htmlFor="contrasena"
+                  className="block text-sm font-semibold text-black"
+                >
+                  Contraseña
+                </label>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError('');
+                    setExitoMensaje('');
+                    setModalRecuperarOpen(true);
+                  }}
+                  disabled={cargando}
+                  className="text-xs font-semibold text-[#AF9241] transition hover:text-[#8A7232] hover:underline"
+                >
+                  ¿Olvidaste tu contraseña?
+                </button>
+              </div>
 
               <div className="relative">
                 <LockKeyhole className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-[#766E65]" />
@@ -147,6 +165,16 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
+
+            {/* Mensajes de éxito */}
+            {exitoMensaje && (
+              <div
+                role="status"
+                className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700 font-medium leading-relaxed"
+              >
+                {exitoMensaje}
+              </div>
+            )}
 
             {/* Mensaje de error */}
             {error && (
@@ -187,6 +215,18 @@ export default function LoginPage() {
           © {new Date().getFullYear()} Artextilo · Todos los derechos reservados.
         </p>
       </div>
+
+      {/* Modal interactivo de recuperación de contraseña */}
+      <RecuperarPasswordModal
+        open={modalRecuperarOpen}
+        onClose={() => setModalRecuperarOpen(false)}
+        initialEmail={correo}
+        onPasswordChanged={(correoActualizado) => {
+          setCorreo(correoActualizado);
+          setContrasena('');
+          setExitoMensaje('¡Contraseña restablecida con éxito! Ingresa tu nueva contraseña para acceder.');
+        }}
+      />
     </main>
   );
 }

@@ -19,3 +19,10 @@ SELECT 'Sucursal Centro', 'Av. Juárez 123, Col. Centro', '58000', '4431234567',
 WHERE NOT EXISTS (
   SELECT 1 FROM sucursal WHERE LOWER(nombre) = 'sucursal centro' AND deleted_at IS NULL
 );
+
+-- Empleado administrador por defecto (contraseña: admin123)
+INSERT INTO empleado (nombre, apellido_paterno, apellido_materno, telefono, correo, contrasena, horario_entrada, horario_salida, id_rol, id_sucursal, estado)
+SELECT 'Administrador', 'General', 'Artextilo', '9510000000', 'admin@artextilo.com', '$2b$10$cQcgb5IzyYVjQoMfldTakOicc6oYkCmPdZgfQu1l9Cv2I2UI0/bNS', '09:00:00', '18:00:00', 1, 1, 'activo'
+WHERE NOT EXISTS (
+  SELECT 1 FROM empleado WHERE LOWER(correo) = 'admin@artextilo.com' AND deleted_at IS NULL
+);
