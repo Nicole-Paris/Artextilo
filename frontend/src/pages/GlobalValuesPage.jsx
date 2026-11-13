@@ -168,7 +168,6 @@ export default function GlobalValuesPage() {
   return (
     <div className="space-y-6">
 
-      {/* Encabezado y búsqueda */}
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h1 className="font-display text-2xl font-bold text-ink">
@@ -191,7 +190,6 @@ export default function GlobalValuesPage() {
         </div>
       </div>
 
-      {/* Alertas */}
       {error && (
         <Alert variant="danger">
           <div className="flex items-center justify-between">
@@ -214,7 +212,6 @@ export default function GlobalValuesPage() {
         </Alert>
       )}
 
-      {/* Formulario */}
       {!showArchived && (
         <div className="rounded-2xl border border-line bg-paper p-6 shadow-soft">
           <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-ink">
@@ -315,7 +312,6 @@ export default function GlobalValuesPage() {
         </div>
       )}
 
-      {/* Filtros */}
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div className="flex flex-col gap-2 sm:flex-row">
           <select
@@ -350,7 +346,6 @@ export default function GlobalValuesPage() {
         </span>
       </div>
 
-      {/* Tabla */}
       <div className="overflow-hidden rounded-2xl border border-line bg-paper shadow-soft">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-line">

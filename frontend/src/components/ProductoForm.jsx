@@ -13,7 +13,6 @@ function ProductoForm({
     const [descripcion, setDescripcion] = useState("");
     const [idCategoria, setIdCategoria] = useState("");
 
-    // Cargar los datos cuando se edita un producto
     useEffect(() => {
         if (productoEditar) {
             setNombre(productoEditar.nombre || "");
@@ -26,7 +25,6 @@ function ProductoForm({
         }
     }, [productoEditar]);
 
-    // Enviar los datos del formulario al componente principal
     const manejarEnvio = (e) => {
         e.preventDefault();
 

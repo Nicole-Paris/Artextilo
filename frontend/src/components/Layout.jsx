@@ -180,12 +180,10 @@ export default function Layout() {
         Saltar al contenido
       </a>
 
-      {/* Sidebar escritorio */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col bg-forest lg:flex">
         <SidebarContent />
       </aside>
 
-      {/* Sidebar móvil */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div
@@ -221,7 +219,6 @@ export default function Layout() {
       )}
 
       <div className="lg:pl-64" data-app-shell>
-        {/* Encabezado */}
         <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-line bg-paper/90 px-4 backdrop-blur lg:px-8">
           <button
             type="button"
@@ -240,7 +237,6 @@ export default function Layout() {
             </p>
           </div>
 
-          {/* Información del empleado y cierre de sesión */}
           <div className="flex items-center gap-3">
             <div className="hidden text-right sm:block">
               <p className="max-w-48 truncate text-sm font-semibold text-ink">
@@ -273,7 +269,6 @@ export default function Layout() {
           </div>
         </header>
 
-        {/* Contenido principal */}
         <main
           id="main-content"
           className="mx-auto w-full max-w-[1500px] px-4 py-6 lg:px-8 lg:py-8"

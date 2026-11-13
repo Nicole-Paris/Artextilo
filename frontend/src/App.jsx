@@ -22,10 +22,8 @@ import GlobalValuesPage from './pages/GlobalValuesPage.jsx';
 export default function App() {
   return (
     <Routes>
-      {/* Ruta pública */}
       <Route path="/login" element={<LoginPage />} />
 
-      {/* Rutas protegidas */}
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
           <Route index element={<Dashboard />} />
@@ -44,7 +42,6 @@ export default function App() {
         </Route>
       </Route>
 
-      {/* Ruta inicial */}
       <Route
         path="/"
         element={

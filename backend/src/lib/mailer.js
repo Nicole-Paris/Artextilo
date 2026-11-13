@@ -106,7 +106,6 @@ export async function sendRecoveryCodeEmail({ to, nombre, codigo, expiraMinutos 
     return { sent: true, devMode: false, messageId: info.messageId };
   } catch (err) {
     console.error('[mailer] Error al enviar correo por Gmail:', err);
-    // Mostrar en consola como respaldo para que el usuario nunca se quede bloqueado
     console.log('\n======================================================');
     console.log(' [Artextilo] RESPALDO EN CONSOLA (Fallo de SMTP)');
     console.log(` Para: ${to} (${nombre})`);

@@ -69,7 +69,6 @@ export async function createGlobalValue(
   { tipo, nombre, valor, descripcion },
   userId = null,
 ) {
-  // El nombre es único incluso cuando el registro está eliminado.
   const [existing] = await pool.execute(
     'SELECT id_global_value, deleted_at FROM global_values WHERE LOWER(nombre) = LOWER(?) LIMIT 1',
     [nombre],

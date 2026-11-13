@@ -37,7 +37,6 @@ export default function LoginPage() {
         throw new Error('No se recibieron los datos del empleado.');
       }
 
-      // Guardar los datos básicos del empleado para la sesión visual.
       localStorage.setItem(
         'artextilo_empleado',
         JSON.stringify(response.data),
@@ -55,7 +54,6 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-[#F9F9F9] px-4 py-10">
       <div className="w-full max-w-md">
 
-        {/* Encabezado */}
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-black shadow-lg">
             <Scissors className="h-8 w-8 text-[#AF9241]" />
@@ -70,7 +68,6 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Formulario */}
         <div className="rounded-2xl border border-[#E5E5E5] bg-white p-7 shadow-xl sm:p-9">
           <div className="mb-7">
             <h2 className="font-display text-2xl font-semibold text-black">
@@ -83,7 +80,6 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
 
-            {/* Correo */}
             <div>
               <label
                 htmlFor="correo"
@@ -109,7 +105,6 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Contraseña */}
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <label
@@ -166,7 +161,6 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Mensajes de éxito */}
             {exitoMensaje && (
               <div
                 role="status"
@@ -176,7 +170,6 @@ export default function LoginPage() {
               </div>
             )}
 
-            {/* Mensaje de error */}
             {error && (
               <div
                 role="alert"
@@ -186,7 +179,6 @@ export default function LoginPage() {
               </div>
             )}
 
-            {/* Botón */}
             <button
               type="submit"
               disabled={cargando}
@@ -216,7 +208,6 @@ export default function LoginPage() {
         </p>
       </div>
 
-      {/* Modal interactivo de recuperación de contraseña */}
       <RecuperarPasswordModal
         open={modalRecuperarOpen}
         onClose={() => setModalRecuperarOpen(false)}

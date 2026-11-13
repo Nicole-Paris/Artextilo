@@ -37,7 +37,6 @@ export const categoriasApi = {
   },
 };
 
-// Compatibilidad con código previo
 export const categoriaService = {
   listar: (search) => categoriasApi.list(search),
   obtenerPorId: (id) => categoriasApi.get(id),

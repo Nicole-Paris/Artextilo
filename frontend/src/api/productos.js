@@ -40,7 +40,6 @@ export const productosApi = {
   },
 };
 
-// Compatibilidad con código previo
 export const productoService = {
   listar: (filters) => productosApi.list(filters),
   obtenerPorId: (id) => productosApi.get(id),

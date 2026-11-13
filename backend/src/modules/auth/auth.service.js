@@ -37,7 +37,6 @@ export async function loginEmpleado({ correo, contrasena }) {
     throw ApiError.unauthorized('Correo o contraseña incorrectos');
   }
 
-  // No devolver la contraseña al cliente
   const { contrasena: password, ...datosEmpleado } = empleado;
 
   return datosEmpleado;
@@ -54,7 +53,6 @@ async function getMinutosVigenciaCodigo() {
       return Number(rows[0].valor);
     }
   } catch {
-    // Si no existe la tabla o el registro, usar 10 por defecto
   }
   return 10;
 }
@@ -80,11 +78,9 @@ export async function solicitarRecuperacion({ correo }) {
 
   const minutosVigencia = await getMinutosVigenciaCodigo();
 
-  // Generar código numérico de 6 dígitos
   const codigo = Math.floor(100000 + Math.random() * 900000).toString();
   const codigoHash = await bcrypt.hash(codigo, 10);
 
-  // Invalidar códigos no usados anteriores
   await pool.execute(
     `UPDATE codigo_recuperacion
      SET usado = 1
@@ -92,7 +88,6 @@ export async function solicitarRecuperacion({ correo }) {
     [empleado.id_empleado],
   );
 
-  // Registrar el nuevo código con fecha de expiración
   await pool.execute(
     `INSERT INTO codigo_recuperacion (id_empleado, codigo_hash, expira_en, usado)
      VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ? MINUTE), 0)`,
@@ -101,7 +96,6 @@ export async function solicitarRecuperacion({ correo }) {
 
   const nombreCompleto = `${empleado.nombre} ${empleado.apellido_paterno}`.trim();
 
-  // Enviar el correo electrónico mediante Gmail / Nodemailer
   const resultadoEnvio = await sendRecoveryCodeEmail({
     to: empleado.correo,
     nombre: nombreCompleto,
@@ -205,7 +199,6 @@ export async function restablecerPassword({ correo, codigo, nueva_contrasena }) 
     throw ApiError.badRequest('El código de verificación es incorrecto.');
   }
 
-  // 1. Marcar el código como utilizado
   await pool.execute(
     `UPDATE codigo_recuperacion
      SET usado = 1
@@ -213,10 +206,8 @@ export async function restablecerPassword({ correo, codigo, nueva_contrasena }) 
     [regCodigo.id_codigo],
   );
 
-  // 2. Hashear la nueva contraseña
   const passwordHash = await bcrypt.hash(nueva_contrasena, 10);
 
-  // 3. Actualizar la contraseña del empleado
   await pool.execute(
     `UPDATE empleado
      SET contrasena = ?

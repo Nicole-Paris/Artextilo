@@ -20,7 +20,7 @@ export default function RecuperarPasswordModal({
   onPasswordChanged,
   initialEmail = '',
 }) {
-  const [paso, setPaso] = useState(1); // 1: Correo, 2: Código, 3: Nueva contraseña, 4: Éxito
+  const [paso, setPaso] = useState(1);
   const [correo, setCorreo] = useState(initialEmail);
   const [codigo, setCodigo] = useState('');
   const [nuevaContrasena, setNuevaContrasena] = useState('');
@@ -30,7 +30,7 @@ export default function RecuperarPasswordModal({
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState('');
   const [mensajeInfo, setMensajeInfo] = useState('');
-  const [segundosRestantes, setSegundosRestantes] = useState(600); // 10 minutos por defecto
+  const [segundosRestantes, setSegundosRestantes] = useState(600);
 
   useEffect(() => {
     if (open) {
@@ -45,7 +45,6 @@ export default function RecuperarPasswordModal({
     }
   }, [open, initialEmail]);
 
-  // Temporizador regresivo en el paso 2
   useEffect(() => {
     let timer;
     if (paso === 2 && segundosRestantes > 0) {
@@ -62,7 +61,6 @@ export default function RecuperarPasswordModal({
   const segundos = segundosRestantes % 60;
   const tiempoFormateado = `${minutos.toString().padStart(2, '0')}:${segundos.toString().padStart(2, '0')}`;
 
-  // Paso 1: Solicitar código
   async function handleSolicitar(e) {
     e.preventDefault();
     setError('');
@@ -86,7 +84,6 @@ export default function RecuperarPasswordModal({
     }
   }
 
-  // Paso 2: Reenviar código
   async function handleReenviar() {
     setError('');
     setMensajeInfo('');
@@ -103,7 +100,6 @@ export default function RecuperarPasswordModal({
     }
   }
 
-  // Paso 2: Validar código
   async function handleVerificar(e) {
     e.preventDefault();
     setError('');
@@ -128,7 +124,6 @@ export default function RecuperarPasswordModal({
     }
   }
 
-  // Paso 3: Cambiar contraseña
   async function handleCambiarPassword(e) {
     e.preventDefault();
     setError('');
@@ -172,7 +167,6 @@ export default function RecuperarPasswordModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
       <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-[#E5E5E5] bg-white shadow-2xl">
-        {/* Encabezado del modal */}
         <div className="flex items-center justify-between border-b border-[#E5E5E5] px-6 py-4">
           <div className="flex items-center gap-2">
             {paso > 1 && paso < 4 && (
@@ -201,29 +195,25 @@ export default function RecuperarPasswordModal({
           </button>
         </div>
 
-        {/* Indicador de pasos */}
         {paso < 4 && (
           <div className="flex border-b border-gray-100 bg-gray-50/50 px-6 py-2.5 text-xs text-[#766E65]">
             <span
-              className={`font-semibold ${
-                paso === 1 ? 'text-[#AF9241]' : 'text-gray-400'
-              }`}
+              className={`font-semibold ${paso === 1 ? 'text-[#AF9241]' : 'text-gray-400'
+                }`}
             >
               1. Correo
             </span>
             <span className="mx-2 text-gray-300">›</span>
             <span
-              className={`font-semibold ${
-                paso === 2 ? 'text-[#AF9241]' : 'text-gray-400'
-              }`}
+              className={`font-semibold ${paso === 2 ? 'text-[#AF9241]' : 'text-gray-400'
+                }`}
             >
               2. Código
             </span>
             <span className="mx-2 text-gray-300">›</span>
             <span
-              className={`font-semibold ${
-                paso === 3 ? 'text-[#AF9241]' : 'text-gray-400'
-              }`}
+              className={`font-semibold ${paso === 3 ? 'text-[#AF9241]' : 'text-gray-400'
+                }`}
             >
               3. Nueva Contraseña
             </span>
@@ -231,7 +221,6 @@ export default function RecuperarPasswordModal({
         )}
 
         <div className="p-6">
-          {/* Mensajes de error */}
           {error && (
             <div
               role="alert"
@@ -241,14 +230,12 @@ export default function RecuperarPasswordModal({
             </div>
           )}
 
-          {/* Mensajes informativos (aviso de correo o modo desarrollo) */}
           {mensajeInfo && paso === 2 && (
             <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs leading-relaxed text-amber-800">
               {mensajeInfo}
             </div>
           )}
 
-          {/* PASO 1: Ingresar correo */}
           {paso === 1 && (
             <form onSubmit={handleSolicitar} className="space-y-4">
               <p className="text-xs text-[#766E65]">
@@ -290,7 +277,6 @@ export default function RecuperarPasswordModal({
             </form>
           )}
 
-          {/* PASO 2: Ingresar código de 6 dígitos */}
           {paso === 2 && (
             <form onSubmit={handleVerificar} className="space-y-4">
               <p className="text-xs text-[#766E65]">
@@ -303,9 +289,8 @@ export default function RecuperarPasswordModal({
                     Código de 6 dígitos
                   </label>
                   <span
-                    className={`font-mono text-xs font-semibold ${
-                      segundosRestantes < 60 ? 'text-red-600 animate-pulse' : 'text-[#766E65]'
-                    }`}
+                    className={`font-mono text-xs font-semibold ${segundosRestantes < 60 ? 'text-red-600 animate-pulse' : 'text-[#766E65]'
+                      }`}
                   >
                     Expira en: {tiempoFormateado}
                   </span>
@@ -355,7 +340,6 @@ export default function RecuperarPasswordModal({
             </form>
           )}
 
-          {/* PASO 3: Nueva contraseña */}
           {paso === 3 && (
             <form onSubmit={handleCambiarPassword} className="space-y-4">
               <p className="text-xs text-[#766E65]">
@@ -424,7 +408,6 @@ export default function RecuperarPasswordModal({
             </form>
           )}
 
-          {/* PASO 4: Confirmación exitosa */}
           {paso === 4 && (
             <div className="text-center py-4 space-y-4">
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-50 text-green-600">
