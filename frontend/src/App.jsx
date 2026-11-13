@@ -17,14 +17,13 @@ import RolesPage from './pages/RolesPage.jsx';
 import SucursalesPage from './pages/SucursalesPage.jsx';
 import CategoriaPage from './pages/CategoriaPage.jsx';
 import ProductosPage from './pages/ProductosPage.jsx';
+import GlobalValuesPage from './pages/GlobalValuesPage.jsx';
 
 export default function App() {
   return (
     <Routes>
-      {/* Ruta pública */}
       <Route path="/login" element={<LoginPage />} />
 
-      {/* Rutas protegidas */}
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
           <Route index element={<Dashboard />} />
@@ -38,11 +37,11 @@ export default function App() {
           <Route path="caja" element={<CajaPage />} />
           <Route path="pedidos" element={<PedidosPage />} />
           <Route path="devoluciones" element={<DevolucionesPage />} />
+          <Route path="global-values" element={<GlobalValuesPage />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Route>
 
-      {/* Ruta inicial */}
       <Route
         path="/"
         element={

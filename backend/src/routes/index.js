@@ -10,6 +10,7 @@ import productosRoutes from '../modules/productos/productos.routes.js';
 import rolesRoutes from '../modules/roles/roles.routes.js';
 import sucursalesRoutes from '../modules/sucursales/sucursales.routes.js';
 import authRoutes from '../modules/auth/auth.routes.js';
+import globalValuesRoutes from '../modules/global-values/global-values.routes.js';
 
 const router = Router();
 
@@ -28,5 +29,6 @@ router.use('/inventario', inventarioRoutes);
 router.use('/caja', cajaRoutes);
 router.use('/pedidos', pedidosRoutes);
 router.use('/auth', authRoutes);
+router.use('/global-values', globalValuesRoutes);
 
 export default router;

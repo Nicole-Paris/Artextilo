@@ -141,7 +141,6 @@ export default function CategoriaPage() {
         </Alert>
       )}
 
-      {/* Formulario Estilizado */}
       <div className="rounded-2xl border border-line bg-paper p-6 shadow-soft">
         <h2 className="mb-4 text-lg font-semibold text-ink flex items-center gap-2">
           <Tag className="h-5 w-5 text-clay" />
@@ -208,7 +207,6 @@ export default function CategoriaPage() {
         </form>
       </div>
 
-      {/* Tabla Estilizada */}
       <div className="rounded-2xl border border-line bg-paper shadow-soft overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-line">

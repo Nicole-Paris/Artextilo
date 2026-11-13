@@ -40,9 +40,8 @@ const MOTIVOS_SALIDA = [
 ];
 
 export default function InventarioPage() {
-  const [activeTab, setActiveTab] = useState('existencias'); // 'existencias' | 'movimientos'
+  const [activeTab, setActiveTab] = useState('existencias');
 
-  // Data
   const [inventario, setInventario] = useState([]);
   const [movimientos, setMovimientos] = useState([]);
   const [stats, setStats] = useState({
@@ -53,25 +52,21 @@ export default function InventarioPage() {
     total_agotados: 0,
   });
 
-  // Catalogs for filters & forms
   const [sucursales, setSucursales] = useState([]);
   const [productos, setProductos] = useState([]);
   const [categorias, setCategorias] = useState([]);
 
-  // Filters
   const [selectedSucursal, setSelectedSucursal] = useState('');
   const [selectedCategoria, setSelectedCategoria] = useState('');
   const [search, setSearch] = useState('');
   const [soloBajoStock, setSoloBajoStock] = useState(false);
   const [filtroTipoMovimiento, setFiltroTipoMovimiento] = useState('');
 
-  // Loading states
   const [loading, setLoading] = useState(false);
   const [loadingMovimientos, setLoadingMovimientos] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  // Modals state
   const [modalMovimientoOpen, setModalMovimientoOpen] = useState(false);
   const [selectedItemForMovimiento, setSelectedItemForMovimiento] = useState(null);
   const [formMovimiento, setFormMovimiento] = useState({
@@ -96,7 +91,6 @@ export default function InventarioPage() {
   const [nuevoStockMinimo, setNuevoStockMinimo] = useState(5);
   const [savingMinimo, setSavingMinimo] = useState(false);
 
-  // Load catalogs once
   useEffect(() => {
     async function loadCatalogs() {
       try {
@@ -115,7 +109,6 @@ export default function InventarioPage() {
     loadCatalogs();
   }, []);
 
-  // Load stats & inventario
   const fetchInventario = useCallback(async () => {
     try {
       setLoading(true);
@@ -167,7 +160,6 @@ export default function InventarioPage() {
     }
   }, [activeTab, fetchInventario, fetchMovimientos]);
 
-  // Open Movement modal for a specific row
   const handleOpenMovimiento = (item, defaultTipo = 'entrada') => {
     setSelectedItemForMovimiento(item);
     setFormMovimiento({
@@ -219,7 +211,6 @@ export default function InventarioPage() {
     }
   };
 
-  // Open Asignar modal
   const handleOpenAsignar = () => {
     setFormAsignar({
       id_producto: '',
@@ -263,7 +254,6 @@ export default function InventarioPage() {
     }
   };
 
-  // Adjust Stock Minimo modal
   const handleOpenMinimo = (item) => {
     setSelectedItemForMinimo(item);
     setNuevoStockMinimo(item.stock_minimo);
@@ -293,7 +283,6 @@ export default function InventarioPage() {
 
   return (
     <div className="space-y-6">
-      {/* Encabezado */}
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h1 className="font-display text-2xl font-bold text-ink">
@@ -324,7 +313,6 @@ export default function InventarioPage() {
         </div>
       </div>
 
-      {/* Alertas */}
       {error && (
         <Alert variant="danger">
           <div className="flex items-center justify-between">
@@ -349,7 +337,6 @@ export default function InventarioPage() {
         </Alert>
       )}
 
-      {/* Tarjetas KPI de Resumen */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div className="rounded-2xl border border-line bg-paper p-5 shadow-soft">
           <div className="flex items-center gap-3">
@@ -408,7 +395,6 @@ export default function InventarioPage() {
         </div>
       </div>
 
-      {/* Pestañas (Tabs) */}
       <div className="flex items-center justify-between border-b border-line">
         <div className="flex gap-4">
           <button
@@ -436,7 +422,6 @@ export default function InventarioPage() {
         </div>
       </div>
 
-      {/* Barra de Filtros */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
@@ -508,7 +493,6 @@ export default function InventarioPage() {
         )}
       </div>
 
-      {/* TAB 1: Tabla de Existencias */}
       {activeTab === 'existencias' && (
         <div className="rounded-2xl border border-line bg-paper shadow-soft overflow-hidden">
           <div className="overflow-x-auto">
@@ -631,7 +615,6 @@ export default function InventarioPage() {
         </div>
       )}
 
-      {/* TAB 2: Historial de Movimientos */}
       {activeTab === 'movimientos' && (
         <div className="rounded-2xl border border-line bg-paper shadow-soft overflow-hidden">
           <div className="overflow-x-auto">
@@ -741,7 +724,6 @@ export default function InventarioPage() {
         </div>
       )}
 
-      {/* MODAL 1: REGISTRAR MOVIMIENTO (Entrada / Salida) */}
       <Modal
         open={modalMovimientoOpen}
         onClose={() => setModalMovimientoOpen(false)}
@@ -843,7 +825,6 @@ export default function InventarioPage() {
               placeholder="Ej. Recepción de maquila..."
               className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay mb-2"
             />
-            {/* Botones de presets rápidos */}
             <div className="flex flex-wrap gap-1.5">
               {(formMovimiento.tipo === 'entrada' ? MOTIVOS_ENTRADA : MOTIVOS_SALIDA).map(
                 (preset) => (
@@ -881,7 +862,6 @@ export default function InventarioPage() {
         </form>
       </Modal>
 
-      {/* MODAL 2: ASIGNAR PRENDA A SUCURSAL */}
       <Modal
         open={modalAsignarOpen}
         onClose={() => setModalAsignarOpen(false)}
@@ -986,7 +966,6 @@ export default function InventarioPage() {
         </form>
       </Modal>
 
-      {/* MODAL 3: AJUSTAR STOCK MÍNIMO */}
       <Modal
         open={modalMinimoOpen}
         onClose={() => setModalMinimoOpen(false)}

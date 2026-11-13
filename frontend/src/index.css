@@ -4,7 +4,6 @@
   --font-sans: "Manrope Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-display: "Fraunces Variable", Georgia, "Times New Roman", serif;
 
-  /* Nueva paleta de colores oficial Artextilo */
   --color-cream: #FFFFFF;
   --color-paper: #FFFFFF;
   --color-ink: #000000;
@@ -75,12 +74,21 @@
   }
 }
 
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear,
+input::-ms-reveal,
+input::-ms-clear {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 .stitch-line {
   height: 1px;
-  background-image: repeating-linear-gradient(
-    90deg,
-    currentColor 0 5px,
-    transparent 5px 11px
-  );
+  background-image: repeating-linear-gradient(90deg,
+      currentColor 0 5px,
+      transparent 5px 11px);
   opacity: 0.35;
 }

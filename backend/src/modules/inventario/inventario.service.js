@@ -148,7 +148,6 @@ export async function createInventario(
   { id_producto, id_sucursal, stock_minimo = 5, stock_inicial = 0 },
   userId = null,
 ) {
-  // 1. Validar producto
   const [productos] = await pool.execute(
     'SELECT id_producto, nombre FROM producto WHERE id_producto = ? AND deleted_at IS NULL LIMIT 1',
     [id_producto],
@@ -157,7 +156,6 @@ export async function createInventario(
     throw ApiError.badRequest('El producto seleccionado no existe o no está activo');
   }
 
-  // 2. Validar sucursal
   const [sucursales] = await pool.execute(
     'SELECT id_sucursal, nombre FROM sucursal WHERE id_sucursal = ? AND deleted_at IS NULL LIMIT 1',
     [id_sucursal],
@@ -166,7 +164,6 @@ export async function createInventario(
     throw ApiError.badRequest('La sucursal seleccionada no existe o no está activa');
   }
 
-  // 3. Validar no duplicidad
   const [existentes] = await pool.execute(
     `SELECT id_inventario
      FROM inventario
@@ -180,7 +177,6 @@ export async function createInventario(
     );
   }
 
-  // 4. Crear con transacción si viene con stock inicial
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
@@ -232,7 +228,6 @@ export async function registerMovimiento(
   try {
     await connection.beginTransaction();
 
-    // Bloqueo de fila para evitar condiciones de carrera (Race conditions)
     const [rows] = await connection.execute(
       `SELECT id_inventario, stock_actual, stock_minimo
        FROM inventario
@@ -259,7 +254,6 @@ export async function registerMovimiento(
       nuevoStock = currentStock - cantidad;
     }
 
-    // Actualizar stock
     await connection.execute(
       `UPDATE inventario
        SET stock_actual = ?, updated_by = ?
@@ -267,7 +261,6 @@ export async function registerMovimiento(
       [nuevoStock, userId || null, id_inventario],
     );
 
-    // Registrar movimiento
     const [movResult] = await connection.execute(
       `INSERT INTO movimiento_inventario (
         id_inventario, id_pedido, id_detalle_pedido, cantidad, tipo, motivo, created_by

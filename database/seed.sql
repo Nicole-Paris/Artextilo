@@ -1,6 +1,5 @@
 USE artextilo_db;
 
--- Roles base del sistema
 INSERT INTO rol (nombre, descripcion)
 SELECT 'Administrador', 'Acceso total al sistema y configuración general'
 WHERE NOT EXISTS (
@@ -13,9 +12,14 @@ WHERE NOT EXISTS (
   SELECT 1 FROM rol WHERE LOWER(nombre) = 'cajera' AND deleted_at IS NULL
 );
 
--- Sucursal de ejemplo para desarrollo
-INSERT INTO sucursal (nombre, direccion, codigo_postal, telefono, horario)
-SELECT 'Sucursal Centro', 'Av. Juárez 123, Col. Centro', '58000', '4431234567', 'Lunes a sábado de 9:00 a 19:00'
+INSERT INTO sucursal (nombre, direccion, ciudad, estado_republica, codigo_postal, telefono, horario)
+SELECT 'Sucursal Centro', 'Av. Juárez 123, Col. Centro', 'Morelia', 'Michoacán', '58000', '4431234567', 'Lunes a sábado de 9:00 a 19:00'
 WHERE NOT EXISTS (
   SELECT 1 FROM sucursal WHERE LOWER(nombre) = 'sucursal centro' AND deleted_at IS NULL
+);
+
+INSERT INTO empleado (nombre, apellido_paterno, apellido_materno, telefono, correo, contrasena, horario_entrada, horario_salida, id_rol, id_sucursal, estado)
+SELECT 'Administrador', 'General', 'Artextilo', '9510000000', 'admin@artextilo.com', '$2b$10$cQcgb5IzyYVjQoMfldTakOicc6oYkCmPdZgfQu1l9Cv2I2UI0/bNS', '09:00:00', '18:00:00', 1, 1, 'activo'
+WHERE NOT EXISTS (
+  SELECT 1 FROM empleado WHERE LOWER(correo) = 'admin@artextilo.com' AND deleted_at IS NULL
 );
