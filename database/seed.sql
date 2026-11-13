@@ -12,8 +12,8 @@ WHERE NOT EXISTS (
   SELECT 1 FROM rol WHERE LOWER(nombre) = 'cajera' AND deleted_at IS NULL
 );
 
-INSERT INTO sucursal (nombre, direccion, codigo_postal, telefono, horario)
-SELECT 'Sucursal Centro', 'Av. Juárez 123, Col. Centro', '58000', '4431234567', 'Lunes a sábado de 9:00 a 19:00'
+INSERT INTO sucursal (nombre, direccion, ciudad, estado_republica, codigo_postal, telefono, horario)
+SELECT 'Sucursal Centro', 'Av. Juárez 123, Col. Centro', 'Morelia', 'Michoacán', '58000', '4431234567', 'Lunes a sábado de 9:00 a 19:00'
 WHERE NOT EXISTS (
   SELECT 1 FROM sucursal WHERE LOWER(nombre) = 'sucursal centro' AND deleted_at IS NULL
 );
