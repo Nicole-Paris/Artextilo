@@ -76,6 +76,14 @@ npm run dev:backend
 npm run dev:frontend
 ```
 
+## Arquitectura 
+<img width="386" height="604" alt="image" src="https://github.com/user-attachments/assets/800d49b8-12da-4268-a218-5df59bd14bce" />
+
+
+## Modelo entidad-relacion
+<img width="2329" height="1631" alt="Artextilov2 0_page-0001" src="https://github.com/user-attachments/assets/e4a2f732-8b3d-4599-88f7-241e783a6965" />
+
+
 
 
 
