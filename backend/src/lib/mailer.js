@@ -4,8 +4,8 @@ function createTransporter() {
   const host = process.env.SMTP_HOST || 'smtp.gmail.com';
   const port = Number(process.env.SMTP_PORT || 465);
   const secure = process.env.SMTP_SECURE === 'true' || port === 465;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+  const user = process.env.SMTP_USER || 'artextilo.soporte@gmail.com';
+  const pass = process.env.SMTP_PASS || 'tinemcwgurevgwfe';
 
   if (!user || !pass) {
     return null;
@@ -24,7 +24,7 @@ function createTransporter() {
 
 export async function sendRecoveryCodeEmail({ to, nombre, codigo, expiraMinutos = 10 }) {
   const transporter = createTransporter();
-  const from = process.env.EMAIL_FROM || `"Artextilo" <${process.env.SMTP_USER || 'no-reply@artextilo.com'}>`;
+  const from = process.env.EMAIL_FROM || `"Artextilo" <${process.env.SMTP_USER || 'artextilo.soporte@gmail.com'}>`;
 
   const htmlContent = `
     <!DOCTYPE html>
