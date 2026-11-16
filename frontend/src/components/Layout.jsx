@@ -66,9 +66,9 @@ function SidebarContent({ onNavigate }) {
       <Link
         to="/"
         onClick={onNavigate}
-        className="flex h-20 items-center gap-3 px-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cream"
+        className="flex h-16 items-center gap-3 px-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cream"
       >
-        <div className="flex h-14 w-full items-center justify-center rounded-xl bg-white px-3 py-2">
+        <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-white p-2">
           <img
             src="/logo-artextilo.jpeg"
             alt="Artextilo, hilando con amor"

@@ -54,14 +54,14 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-[#F9F9F9] px-4 py-10">
       <div className="w-full max-w-md">
 
-        <div className="mb-8 text-center">
+        <div className="mb-4 text-center">
           <img
             src="/logo-artextilo.jpeg"
             alt="Artextilo, hilando con amor"
-            className="mx-auto mb-5 h-auto w-56 object-contain mix-blend-multiply"
+            className="mx-auto mb-2 h-auto w-36 object-contain mix-blend-multiply"
           />
 
-          <p className="text-sm text-[#766E65]">
+          <p className="mt-1 text-sm text-[#766E65]">
             Sistema de gestión administrativa
           </p>
         </div>
