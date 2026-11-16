@@ -11,7 +11,6 @@ import {
   LayoutDashboard,
   Menu,
   Contact,
-  Scissors,
   ShieldCheck,
   Store,
   Users,
@@ -69,17 +68,12 @@ function SidebarContent({ onNavigate }) {
         onClick={onNavigate}
         className="flex h-20 items-center gap-3 px-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cream"
       >
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-clay text-white">
-          <Scissors className="h-5 w-5" aria-hidden="true" />
-        </div>
-
-        <div>
-          <p className="font-display text-lg font-semibold leading-tight text-cream">
-            Artextilo
-          </p>
-          <p className="text-xs text-cream/60">
-            Gestión administrativa
-          </p>
+        <div className="flex h-14 w-full items-center justify-center rounded-xl bg-white px-3 py-2">
+          <img
+            src="/logo-artextilo.jpeg"
+            alt="Artextilo, hilando con amor"
+            className="h-full w-full object-contain"
+          />
         </div>
       </Link>
 

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Scissors, LoaderCircle, LockKeyhole, Mail } from 'lucide-react';
+import { Eye, EyeOff, LoaderCircle, LockKeyhole, Mail } from 'lucide-react';
 import { authApi } from '../api/auth.js';
 import RecuperarPasswordModal from '../components/RecuperarPasswordModal.jsx';
 
@@ -55,15 +55,13 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
 
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-black shadow-lg">
-            <Scissors className="h-8 w-8 text-[#AF9241]" />
-          </div>
+          <img
+            src="/logo-artextilo.jpeg"
+            alt="Artextilo, hilando con amor"
+            className="mx-auto mb-5 h-auto w-56 object-contain mix-blend-multiply"
+          />
 
-          <h1 className="font-display text-4xl font-semibold tracking-tight text-black">
-            Artextilo
-          </h1>
-
-          <p className="mt-2 text-sm text-[#766E65]">
+          <p className="text-sm text-[#766E65]">
             Sistema de gestión administrativa
           </p>
         </div>
