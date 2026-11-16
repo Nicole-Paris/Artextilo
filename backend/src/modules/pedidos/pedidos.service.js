@@ -574,6 +574,11 @@ export async function createPedido(payload, userId = null) {
       50,
     );
     const anticipoRequerido = Math.ceil((total * anticipoPorcentaje) / 100);
+    const montoInicial = Number(pago_inicial?.monto || 0);
+
+    if (total > 0 && !(montoInicial > 0)) {
+      throw ApiError.badRequest('El anticipo es obligatorio para crear el pedido.');
+    }
 
     if (condicion_pago === 'credito') {
       if (!cliente.tiene_credito) {
@@ -714,7 +719,6 @@ export async function createPedido(payload, userId = null) {
     }
 
     let totalPagado = 0;
-    const montoInicial = Number(pago_inicial?.monto || 0);
 
     if (montoInicial > 0) {
       if (pago_inicial.metodo_pago === 'credito' && condicion_pago !== 'credito') {
@@ -723,7 +727,7 @@ export async function createPedido(payload, userId = null) {
 
       if (montoInicial < anticipoRequerido && montoInicial < total) {
         throw ApiError.badRequest(
-          `El anticipo mínimo es ${anticipoRequerido}. Si no vas a cobrar ahora, deja el monto en 0 y regístralo después en Pagos.`,
+          `El anticipo mínimo es ${anticipoRequerido}.`,
         );
       }
 

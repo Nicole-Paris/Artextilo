@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertOctagon,
   AlertTriangle,
@@ -13,7 +13,6 @@ import {
   RefreshCw,
   Search,
   SlidersHorizontal,
-  Store,
 } from 'lucide-react';
 import Alert from '../components/Alert.jsx';
 import Button from '../components/Button.jsx';
@@ -39,6 +38,19 @@ const MOTIVOS_SALIDA = [
   'Muestra comercial',
 ];
 
+function getSucursalSesion() {
+  try {
+    const empleado = JSON.parse(
+      localStorage.getItem('artextilo_empleado') || 'null',
+    );
+    const idSucursal = empleado?.id_sucursal;
+
+    return idSucursal == null ? '' : String(idSucursal);
+  } catch {
+    return '';
+  }
+}
+
 export default function InventarioPage() {
   const [activeTab, setActiveTab] = useState('existencias');
 
@@ -56,10 +68,10 @@ export default function InventarioPage() {
   const [productos, setProductos] = useState([]);
   const [categorias, setCategorias] = useState([]);
 
-  const [selectedSucursal, setSelectedSucursal] = useState('');
+  const selectedSucursal = useMemo(() => getSucursalSesion(), []);
   const [selectedCategoria, setSelectedCategoria] = useState('');
   const [search, setSearch] = useState('');
-  const [soloBajoStock, setSoloBajoStock] = useState(false);
+  const [filtroStock, setFiltroStock] = useState('');
   const [filtroTipoMovimiento, setFiltroTipoMovimiento] = useState('');
 
   const [loading, setLoading] = useState(false);
@@ -80,16 +92,10 @@ export default function InventarioPage() {
   const [modalAsignarOpen, setModalAsignarOpen] = useState(false);
   const [formAsignar, setFormAsignar] = useState({
     id_producto: '',
-    id_sucursal: '',
     stock_minimo: 5,
     stock_inicial: 0,
   });
   const [savingAsignar, setSavingAsignar] = useState(false);
-
-  const [modalMinimoOpen, setModalMinimoOpen] = useState(false);
-  const [selectedItemForMinimo, setSelectedItemForMinimo] = useState(null);
-  const [nuevoStockMinimo, setNuevoStockMinimo] = useState(5);
-  const [savingMinimo, setSavingMinimo] = useState(false);
 
   useEffect(() => {
     async function loadCatalogs() {
@@ -118,7 +124,6 @@ export default function InventarioPage() {
       if (selectedSucursal) filters.id_sucursal = selectedSucursal;
       if (selectedCategoria) filters.id_categoria = selectedCategoria;
       if (search) filters.search = search;
-      if (soloBajoStock) filters.bajo_stock = true;
 
       const [invRes, statsRes] = await Promise.all([
         inventarioApi.list(filters),
@@ -133,7 +138,7 @@ export default function InventarioPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedSucursal, selectedCategoria, search, soloBajoStock]);
+  }, [selectedSucursal, selectedCategoria, search]);
 
   const fetchMovimientos = useCallback(async () => {
     try {
@@ -159,6 +164,10 @@ export default function InventarioPage() {
       fetchMovimientos();
     }
   }, [activeTab, fetchInventario, fetchMovimientos]);
+
+  const inventarioVisible = filtroStock
+    ? inventario.filter((item) => item.estado_stock === filtroStock)
+    : inventario;
 
   const handleOpenMovimiento = (item, defaultTipo = 'entrada') => {
     setSelectedItemForMovimiento(item);
@@ -214,21 +223,21 @@ export default function InventarioPage() {
   const handleOpenAsignar = () => {
     setFormAsignar({
       id_producto: '',
-      id_sucursal: selectedSucursal || (sucursales[0]?.id_sucursal ?? ''),
       stock_minimo: 5,
       stock_inicial: 0,
     });
+    setError('');
     setModalAsignarOpen(true);
   };
 
   const handleSaveAsignar = async (e) => {
     e.preventDefault();
-    if (!formAsignar.id_producto) {
-      setError('Por favor selecciona una prenda.');
+    if (!selectedSucursal) {
+      setError('No se pudo determinar la sucursal de la sesión.');
       return;
     }
-    if (!formAsignar.id_sucursal) {
-      setError('Por favor selecciona una sucursal.');
+    if (!formAsignar.id_producto) {
+      setError('Por favor selecciona una prenda.');
       return;
     }
 
@@ -239,7 +248,7 @@ export default function InventarioPage() {
 
       await inventarioApi.create({
         id_producto: Number(formAsignar.id_producto),
-        id_sucursal: Number(formAsignar.id_sucursal),
+        id_sucursal: Number(selectedSucursal),
         stock_minimo: Number(formAsignar.stock_minimo) || 0,
         stock_inicial: Number(formAsignar.stock_inicial) || 0,
       });
@@ -251,33 +260,6 @@ export default function InventarioPage() {
       setError(err.message || 'Error al asignar prenda al inventario.');
     } finally {
       setSavingAsignar(false);
-    }
-  };
-
-  const handleOpenMinimo = (item) => {
-    setSelectedItemForMinimo(item);
-    setNuevoStockMinimo(item.stock_minimo);
-    setModalMinimoOpen(true);
-  };
-
-  const handleSaveMinimo = async (e) => {
-    e.preventDefault();
-    try {
-      setSavingMinimo(true);
-      setError('');
-      setSuccess('');
-
-      await inventarioApi.updateStockMinimo(selectedItemForMinimo.id_inventario, {
-        stock_minimo: Number(nuevoStockMinimo),
-      });
-
-      setSuccess('Stock mínimo actualizado correctamente.');
-      setModalMinimoOpen(false);
-      fetchInventario();
-    } catch (err) {
-      setError(err.message || 'Error al actualizar stock mínimo.');
-    } finally {
-      setSavingMinimo(false);
     }
   };
 
@@ -308,7 +290,7 @@ export default function InventarioPage() {
             className="text-xs sm:text-sm"
           >
             <Plus className="h-4 w-4" />
-            Asignar Prenda a Sucursal
+            Asignar Prenda
           </Button>
         </div>
       </div>
@@ -422,7 +404,11 @@ export default function InventarioPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+      <div
+        className={`grid grid-cols-1 gap-3 ${
+          activeTab === 'existencias' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'
+        }`}
+      >
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
           <input
@@ -432,21 +418,6 @@ export default function InventarioPage() {
             onChange={(e) => setSearch(e.target.value)}
             className="w-full rounded-xl border border-line bg-white pl-9 pr-4 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
           />
-        </div>
-
-        <div>
-          <select
-            value={selectedSucursal}
-            onChange={(e) => setSelectedSucursal(e.target.value)}
-            className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
-          >
-            <option value="">Todas las sucursales</option>
-            {sucursales.map((suc) => (
-              <option key={suc.id_sucursal} value={suc.id_sucursal}>
-                {suc.nombre} ({suc.ciudad || 'Local'})
-              </option>
-            ))}
-          </select>
         </div>
 
         {activeTab === 'existencias' ? (
@@ -466,16 +437,17 @@ export default function InventarioPage() {
               </select>
             </div>
 
-            <div className="flex items-center">
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-ink">
-                <input
-                  type="checkbox"
-                  checked={soloBajoStock}
-                  onChange={(e) => setSoloBajoStock(e.target.checked)}
-                  className="h-4 w-4 rounded border-line text-clay focus:ring-clay"
-                />
-                <span className="font-medium text-amber-700">Ver solo alertas (Bajo stock / Agotado)</span>
-              </label>
+            <div>
+              <select
+                value={filtroStock}
+                onChange={(e) => setFiltroStock(e.target.value)}
+                aria-label="Filtrar por stock"
+                className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
+              >
+                <option value="">Stock</option>
+                <option value="bajo_stock">Bajo stock</option>
+                <option value="agotado">Agotados</option>
+              </select>
             </div>
           </>
         ) : (
@@ -503,13 +475,7 @@ export default function InventarioPage() {
                     Prenda & SKU
                   </th>
                   <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-muted">
-                    Sucursal
-                  </th>
-                  <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-muted">
                     Color & Talla
-                  </th>
-                  <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-muted">
-                    Precio Venta
                   </th>
                   <th className="px-6 py-3.5 text-center text-xs font-semibold uppercase tracking-wider text-muted">
                     Mínimo
@@ -517,26 +483,23 @@ export default function InventarioPage() {
                   <th className="px-6 py-3.5 text-center text-xs font-semibold uppercase tracking-wider text-muted">
                     Stock Actual
                   </th>
-                  <th className="px-6 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-muted">
-                    Acciones de Stock
-                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line bg-white">
-                {loading && inventario.length === 0 ? (
+                {loading && inventarioVisible.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="px-6 py-8 text-center text-sm text-muted">
+                    <td colSpan="4" className="px-6 py-8 text-center text-sm text-muted">
                       Cargando existencias de inventario...
                     </td>
                   </tr>
-                ) : inventario.length === 0 ? (
+                ) : inventarioVisible.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="px-6 py-8 text-center text-sm text-muted">
+                    <td colSpan="4" className="px-6 py-8 text-center text-sm text-muted">
                       No se encontraron registros de inventario con los filtros aplicados.
                     </td>
                   </tr>
                 ) : (
-                  inventario.map((item) => (
+                  inventarioVisible.map((item) => (
                     <tr key={item.id_inventario} className="transition hover:bg-sand/20">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="font-semibold text-ink">{item.producto_nombre}</div>
@@ -545,30 +508,12 @@ export default function InventarioPage() {
                         </div>
                       </td>
 
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-ink">
-                        <div className="flex items-center gap-1.5 font-medium">
-                          <Store className="h-4 w-4 text-muted" />
-                          {item.sucursal_nombre}
-                        </div>
-                      </td>
-
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-muted capitalize">
                         {item.producto_color} • Talla {item.producto_talla}
                       </td>
 
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-ink">
-                        ${Number(item.producto_precio).toLocaleString('es-MX')} MXN
-                      </td>
-
                       <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-muted">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenMinimo(item)}
-                          title="Clic para cambiar stock mínimo"
-                          className="rounded-lg border border-line px-2 py-0.5 text-xs font-semibold hover:bg-sand"
-                        >
-                          {item.stock_minimo} pzas
-                        </button>
+                        {item.stock_minimo} pzas
                       </td>
 
                       <td className="px-6 py-4 whitespace-nowrap text-center">
@@ -585,26 +530,6 @@ export default function InventarioPage() {
                           {item.estado_stock === 'agotado' && ' (Agotado)'}
                           {item.estado_stock === 'bajo_stock' && ' (Bajo)'}
                         </span>
-                      </td>
-
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                        <div className="flex justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenMovimiento(item, 'entrada')}
-                            className="inline-flex items-center gap-1 rounded-lg bg-forest/10 px-2.5 py-1 text-xs font-semibold text-forest hover:bg-forest/20"
-                          >
-                            <ArrowUpRight className="h-3.5 w-3.5" /> Entrada
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenMovimiento(item, 'salida')}
-                            disabled={item.stock_actual <= 0}
-                            className="inline-flex items-center gap-1 rounded-lg bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-30 disabled:cursor-not-allowed"
-                          >
-                            <ArrowDownRight className="h-3.5 w-3.5" /> Salida
-                          </button>
-                        </div>
                       </td>
                     </tr>
                   ))
@@ -865,10 +790,12 @@ export default function InventarioPage() {
       <Modal
         open={modalAsignarOpen}
         onClose={() => setModalAsignarOpen(false)}
-        title="Asignar Prenda a Sucursal"
-        description="Da de alta un producto del catálogo general en el inventario de una sucursal"
+        title="Asignar Prenda"
+        description="Da de alta un producto del catálogo en el inventario de tu sucursal"
       >
         <form onSubmit={handleSaveAsignar} className="space-y-4">
+          {error && <Alert variant="danger">{error}</Alert>}
+
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
               Prenda del Catálogo *
@@ -892,23 +819,14 @@ export default function InventarioPage() {
 
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
-              Sucursal Destino *
+              Sucursal actual
             </label>
-            <select
-              value={formAsignar.id_sucursal}
-              onChange={(e) =>
-                setFormAsignar((prev) => ({ ...prev, id_sucursal: e.target.value }))
-              }
-              required
-              className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
-            >
-              <option value="">Seleccione sucursal...</option>
-              {sucursales.map((suc) => (
-                <option key={suc.id_sucursal} value={suc.id_sucursal}>
-                  {suc.nombre} ({suc.ciudad || 'Local'})
-                </option>
-              ))}
-            </select>
+            <p className="w-full rounded-xl border border-line bg-sand px-3.5 py-2.5 text-sm text-ink">
+              {sucursales.find(
+                (sucursal) =>
+                  String(sucursal.id_sucursal) === selectedSucursal,
+              )?.nombre || 'No disponible'}
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -960,54 +878,7 @@ export default function InventarioPage() {
               variant="primary"
               loading={savingAsignar}
             >
-              Asignar a Sucursal
-            </Button>
-          </div>
-        </form>
-      </Modal>
-
-      <Modal
-        open={modalMinimoOpen}
-        onClose={() => setModalMinimoOpen(false)}
-        title="Ajustar Alerta de Stock Mínimo"
-        description={
-          selectedItemForMinimo
-            ? `${selectedItemForMinimo.producto_nombre} (${selectedItemForMinimo.producto_color} Talla ${selectedItemForMinimo.producto_talla}) en ${selectedItemForMinimo.sucursal_nombre}`
-            : ''
-        }
-      >
-        <form onSubmit={handleSaveMinimo} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
-              Nuevo Stock Mínimo (Piezas)
-            </label>
-            <input
-              type="number"
-              min="0"
-              value={nuevoStockMinimo}
-              onChange={(e) => setNuevoStockMinimo(e.target.value)}
-              required
-              className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
-            />
-            <p className="mt-1.5 text-xs text-muted">
-              Cuando las existencias sean menores o iguales a este número, se marcará como alerta de reorden.
-            </p>
-          </div>
-
-          <div className="flex justify-end gap-2.5 pt-4 border-t border-line">
-            <Button
-              variant="secondary"
-              onClick={() => setModalMinimoOpen(false)}
-              disabled={savingMinimo}
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              loading={savingMinimo}
-            >
-              Guardar Stock Mínimo
+              Asignar Prenda
             </Button>
           </div>
         </form>

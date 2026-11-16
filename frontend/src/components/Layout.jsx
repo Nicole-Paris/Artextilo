@@ -32,6 +32,7 @@ import Modal from './Modal.jsx';
 
 const navigation = [
   { to: '/', label: 'Inicio', icon: LayoutDashboard, end: true },
+  { to: '/pedidos', label: 'Pedidos', icon: Receipt },
   { to: '/clientes', label: 'Clientes', icon: Contact },
   { to: '/empleados', label: 'Empleados', icon: Users },
   { to: '/sucursales', label: 'Sucursales', icon: Store },
@@ -40,7 +41,6 @@ const navigation = [
   { to: '/productos', label: 'Productos', icon: Package },
   { to: '/inventario', label: 'Inventario', icon: Boxes },
   { to: '/caja', label: 'Corte de caja', icon: Wallet },
-  { to: '/pedidos', label: 'Pedidos', icon: Receipt },
   { to: '/devoluciones', label: 'Devoluciones', icon: RotateCcw },
   { to: '/global-values', label: 'Valores Globales', icon: Settings },
 ];

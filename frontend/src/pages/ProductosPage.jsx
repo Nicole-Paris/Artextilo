@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit, Trash2, Package, Search, RefreshCw, Filter } from 'lucide-react';
+import { Plus, Pencil, Search, RefreshCw, Filter } from 'lucide-react';
 import Alert from '../components/Alert.jsx';
+import Button from '../components/Button.jsx';
+import ConfirmDialog from '../components/ConfirmDialog.jsx';
+import Field, { inputClass } from '../components/Field.jsx';
+import IconButton from '../components/IconButton.jsx';
+import Modal from '../components/Modal.jsx';
 import { productosApi } from '../api/productos.js';
 import { categoriasApi } from '../api/categorias.js';
 
@@ -14,7 +19,7 @@ const INITIAL_FORM = {
   talla: '',
   descripcion: '',
   costo_compra: 0,
-  precio_unitario: 0,
+  precio_unitario: '',
   estado: 'activo',
 };
 
@@ -25,10 +30,15 @@ export default function ProductosPage() {
   const [selectedCategoria, setSelectedCategoria] = useState('');
   const [form, setForm] = useState(INITIAL_FORM);
   const [isEditing, setIsEditing] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [touched, setTouched] = useState({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [formError, setFormError] = useState('');
   const [success, setSuccess] = useState('');
+  const [estadoTarget, setEstadoTarget] = useState(null);
+  const [updatingEstadoId, setUpdatingEstadoId] = useState(null);
 
   const fetchCategorias = useCallback(async () => {
     try {
@@ -67,36 +77,45 @@ export default function ProductosPage() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    const nextValue = ['costo_compra', 'precio_unitario'].includes(name)
+      ? value.replace(/\D/g, '')
+      : value;
+    setForm((prev) => ({ ...prev, [name]: nextValue }));
+    setFormError('');
+  };
+
+  const fieldErrors = {
+    id_categoria: form.id_categoria ? '' : 'Selecciona una categoría.',
+    nombre: form.nombre.trim() ? '' : 'El nombre del producto es obligatorio.',
+    color: form.color.trim() ? '' : 'El color es obligatorio.',
+    talla: form.talla.trim() ? '' : 'La talla es obligatoria.',
+    precio_unitario: form.precio_unitario !== '' ? '' : 'El precio es obligatorio.',
+  };
+  const visibleFieldErrors = Object.fromEntries(
+    Object.entries(fieldErrors).filter(([field, message]) => touched[field] && message),
+  );
+  const formIsValid = Object.values(fieldErrors).every((message) => !message);
+
+  const handleBlur = (e) => {
+    setTouched((prev) => ({ ...prev, [e.target.name]: true }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (!form.id_categoria) {
-      setError('Por favor selecciona una categoría.');
-      return;
-    }
-    if (!form.nombre.trim()) {
-      setError('El nombre del producto es obligatorio.');
-      return;
-    }
-    if (!form.color.trim()) {
-      setError('El color es obligatorio.');
-      return;
-    }
-    if (!form.talla.trim()) {
-      setError('La talla es obligatoria.');
-      return;
-    }
-    if (Number(form.precio_unitario) < 0) {
-      setError('El precio unitario no puede ser negativo.');
+    setTouched({
+      id_categoria: true,
+      nombre: true,
+      color: true,
+      talla: true,
+      precio_unitario: true,
+    });
+    if (!formIsValid) {
       return;
     }
 
     try {
       setSaving(true);
-      setError('');
+      setFormError('');
       setSuccess('');
 
       const payload = {
@@ -123,7 +142,7 @@ export default function ProductosPage() {
       await fetchProductos();
       resetForm();
     } catch (err) {
-      setError(err.message || 'Error al guardar el producto.');
+      setFormError(err.message || 'Error al guardar el producto.');
     } finally {
       setSaving(false);
     }
@@ -139,32 +158,61 @@ export default function ProductosPage() {
       color: prod.color,
       talla: prod.talla,
       descripcion: prod.descripcion || '',
-      costo_compra: prod.costo_compra,
-      precio_unitario: prod.precio_unitario,
+      costo_compra: String(prod.costo_compra ?? 0),
+      precio_unitario: String(prod.precio_unitario ?? ''),
       estado: prod.estado,
     });
     setIsEditing(true);
+    setFormOpen(true);
+    setTouched({});
+    setFormError('');
     setError('');
     setSuccess('');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('¿Estás seguro de eliminar este producto?')) return;
+  const handleNew = () => {
+    setForm({ ...INITIAL_FORM });
+    setIsEditing(false);
+    setFormOpen(true);
+    setTouched({});
+    setFormError('');
+    setError('');
+    setSuccess('');
+  };
+
+  const updateEstado = async (prod, estado) => {
     try {
       setError('');
       setSuccess('');
-      await productosApi.remove(id);
-      setSuccess('Producto eliminado con éxito.');
+      setUpdatingEstadoId(prod.id_producto);
+      await productosApi.update(prod.id_producto, {
+        id_categoria: Number(prod.id_categoria),
+        sku: prod.sku?.trim() || null,
+        nombre: prod.nombre.trim(),
+        genero: prod.genero || 'unisex',
+        color: prod.color.trim(),
+        talla: prod.talla.trim(),
+        descripcion: prod.descripcion?.trim() || null,
+        costo_compra: Number(prod.costo_compra) || 0,
+        precio_unitario: Number(prod.precio_unitario) || 0,
+        estado,
+      });
+      setSuccess(estado === 'activo' ? 'Producto activado con éxito.' : 'Producto desactivado con éxito.');
       await fetchProductos();
     } catch (err) {
-      setError(err.message || 'Error al eliminar el producto.');
+      setError(err.message || 'Error al actualizar el estado del producto.');
+    } finally {
+      setUpdatingEstadoId(null);
+      setEstadoTarget(null);
     }
   };
 
   const resetForm = () => {
-    setForm(INITIAL_FORM);
+    setForm({ ...INITIAL_FORM });
     setIsEditing(false);
+    setFormOpen(false);
+    setTouched({});
+    setFormError('');
   };
 
   return (
@@ -174,7 +222,7 @@ export default function ProductosPage() {
           <h1 className="font-display text-2xl font-bold text-ink">Catálogo de Productos</h1>
           <p className="text-sm text-muted">Administra los artículos, prendas y variantes de la tienda</p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row">
           <div className="relative w-full sm:w-56">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
             <input
@@ -200,11 +248,15 @@ export default function ProductosPage() {
               ))}
             </select>
           </div>
+          <Button onClick={handleNew}>
+            <Plus className="h-4 w-4" />
+            Nuevo producto
+          </Button>
         </div>
       </div>
 
       {error && (
-        <Alert variant="danger">
+        <Alert type="error">
           <div className="flex items-center justify-between">
             <span>{error}</span>
             <button
@@ -219,27 +271,48 @@ export default function ProductosPage() {
       )}
 
       {success && (
-        <Alert variant="success">
-          <span>{success}</span>
-        </Alert>
+        <Alert type="success">{success}</Alert>
       )}
 
-      <div className="rounded-2xl border border-line bg-paper p-6 shadow-soft">
-        <h2 className="mb-4 text-lg font-semibold text-ink flex items-center gap-2">
-          <Package className="h-5 w-5 text-clay" />
-          {isEditing ? 'Editar Producto' : 'Nuevo Producto'}
-        </h2>
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
-              Categoría *
-            </label>
+      <Modal
+        open={formOpen}
+        onClose={resetForm}
+        title={isEditing ? 'Editar producto' : 'Nuevo producto'}
+        size="lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={resetForm} disabled={saving}>
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              form="producto-form"
+              loading={saving}
+              disabled={!formIsValid}
+            >
+              {isEditing ? 'Actualizar producto' : 'Guardar producto'}
+            </Button>
+          </>
+        }
+      >
+        <form
+          id="producto-form"
+          onSubmit={handleSubmit}
+          className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+        >
+          {formError && (
+            <Alert type="error" className="sm:col-span-2">
+              {formError}
+            </Alert>
+          )}
+          <Field label="Categoría *" htmlFor="producto-categoria" error={visibleFieldErrors.id_categoria}>
             <select
+              id="producto-categoria"
               name="id_categoria"
               value={form.id_categoria}
               onChange={handleChange}
-              required
-              className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
+              onBlur={handleBlur}
+              className={inputClass(visibleFieldErrors.id_categoria)}
             >
               <option value="">Seleccione categoría...</option>
               {categorias.map((cat) => (
@@ -248,45 +321,44 @@ export default function ProductosPage() {
                 </option>
               ))}
             </select>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
-              SKU (Opcional)
-            </label>
+          </Field>
+          <Field label="SKU (Opcional)" htmlFor="producto-sku">
             <input
+              id="producto-sku"
               type="text"
               name="sku"
               value={form.sku}
               onChange={handleChange}
-              placeholder="Ej. GUA-BLA-M"
               maxLength={30}
-              className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
+              placeholder="Ej. GUA-BLA-M"
+              className={inputClass()}
             />
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
-              Nombre de la prenda *
-            </label>
+          </Field>
+          <Field
+            label="Nombre de la prenda *"
+            htmlFor="producto-nombre"
+            error={visibleFieldErrors.nombre}
+            className="sm:col-span-2"
+          >
             <input
+              id="producto-nombre"
               type="text"
               name="nombre"
               value={form.nombre}
               onChange={handleChange}
-              required
+              onBlur={handleBlur}
               maxLength={60}
               placeholder="Ej. Guayabera Presidencial Lino"
-              className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
+              className={inputClass(visibleFieldErrors.nombre)}
             />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
-              Género *
-            </label>
+          </Field>
+          <Field label="Género" htmlFor="producto-genero">
             <select
+              id="producto-genero"
               name="genero"
               value={form.genero}
               onChange={handleChange}
-              className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay capitalize"
+              className={`${inputClass()} capitalize`}
             >
               <option value="caballero">Caballero</option>
               <option value="dama">Dama</option>
@@ -294,114 +366,90 @@ export default function ProductosPage() {
               <option value="nina">Niña</option>
               <option value="unisex">Unisex</option>
             </select>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
-              Color *
-            </label>
+          </Field>
+          <Field label="Color *" htmlFor="producto-color" error={visibleFieldErrors.color}>
             <input
+              id="producto-color"
               type="text"
               name="color"
               value={form.color}
               onChange={handleChange}
-              required
+              onBlur={handleBlur}
               maxLength={60}
               placeholder="Ej. Blanco hueso"
-              className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
+              className={inputClass(visibleFieldErrors.color)}
             />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
-              Talla *
-            </label>
+          </Field>
+          <Field label="Talla *" htmlFor="producto-talla" error={visibleFieldErrors.talla}>
             <input
+              id="producto-talla"
               type="text"
               name="talla"
               value={form.talla}
               onChange={handleChange}
-              required
+              onBlur={handleBlur}
               maxLength={20}
               placeholder="Ej. M, G, 38, 40"
-              className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
+              className={inputClass(visibleFieldErrors.talla)}
             />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
-              Estado
-            </label>
+          </Field>
+          <Field label="Estado" htmlFor="producto-estado">
             <select
+              id="producto-estado"
               name="estado"
               value={form.estado}
               onChange={handleChange}
-              className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
+              className={inputClass()}
             >
               <option value="activo">Activo</option>
               <option value="inactivo">Inactivo</option>
             </select>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
-              Costo de Compra (MXN)
-            </label>
+          </Field>
+          <Field label="Costo de compra (MXN)" htmlFor="producto-costo">
             <input
-              type="number"
+              id="producto-costo"
+              type="text"
+              inputMode="numeric"
               name="costo_compra"
               value={form.costo_compra}
               onChange={handleChange}
-              min="0"
-              className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
+              className={inputClass()}
             />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
-              Precio Unitario (MXN) *
-            </label>
+          </Field>
+          <Field
+            label="Precio unitario (MXN) *"
+            htmlFor="producto-precio"
+            error={visibleFieldErrors.precio_unitario}
+          >
             <input
-              type="number"
+              id="producto-precio"
+              type="text"
+              inputMode="numeric"
               name="precio_unitario"
               value={form.precio_unitario}
               onChange={handleChange}
-              required
-              min="0"
-              className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
+              onBlur={handleBlur}
+              className={inputClass(visibleFieldErrors.precio_unitario)}
             />
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
-              Descripción / Detalles
-            </label>
+          </Field>
+          <Field
+            label="Descripción / Detalles"
+            htmlFor="producto-descripcion"
+            className="sm:col-span-2"
+          >
             <input
+              id="producto-descripcion"
               type="text"
               name="descripcion"
               value={form.descripcion}
               onChange={handleChange}
               maxLength={150}
               placeholder="Detalles sobre bordado, tela o corte..."
-              className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
+              className={inputClass()}
             />
-          </div>
-          <div className="md:col-span-4 flex justify-end gap-3 pt-2">
-            {isEditing && (
-              <button
-                type="button"
-                onClick={resetForm}
-                disabled={saving}
-                className="rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-semibold text-muted transition hover:bg-sand"
-              >
-                Cancelar
-              </button>
-            )}
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex items-center gap-2 rounded-xl bg-clay px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-clay/90 disabled:opacity-50"
-            >
-              <Plus className="h-4 w-4" />
-              {saving ? 'Guardando...' : isEditing ? 'Actualizar Producto' : 'Guardar Producto'}
-            </button>
-          </div>
+          </Field>
         </form>
-      </div>
+      </Modal>
 
       <div className="rounded-2xl border border-line bg-paper shadow-soft overflow-hidden">
         <div className="overflow-x-auto">
@@ -449,25 +497,37 @@ export default function ProductosPage() {
                       ${Number(prod.precio_unitario).toLocaleString('es-MX')} MXN
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                        prod.estado === 'activo' ? 'bg-forest/10 text-forest' : 'bg-red-100 text-red-700'
-                      }`}>
-                        {prod.estado}
-                      </span>
+                      <select
+                        value={prod.estado}
+                        aria-label={`Estado de ${prod.nombre}`}
+                        disabled={updatingEstadoId === prod.id_producto}
+                        onChange={(e) => {
+                          if (e.target.value === 'inactivo') {
+                            setEstadoTarget(prod);
+                          } else {
+                            updateEstado(prod, 'activo');
+                          }
+                        }}
+                        className={`rounded-full border border-transparent px-3 py-1 text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clay disabled:opacity-50 ${
+                          prod.estado === 'activo'
+                            ? 'bg-forest/10 text-forest'
+                            : 'bg-red-100 text-red-700'
+                        }`}
+                      >
+                        <option value="activo">Activo</option>
+                        <option value="inactivo">Inactivo</option>
+                      </select>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => handleEdit(prod)}
-                        className="text-clay hover:underline mr-4 inline-flex items-center gap-1"
-                      >
-                        <Edit className="h-4 w-4" /> Editar
-                      </button>
-                      <button
-                        onClick={() => handleDelete(prod.id_producto)}
-                        className="text-red-600 hover:underline inline-flex items-center gap-1"
-                      >
-                        <Trash2 className="h-4 w-4" /> Eliminar
-                      </button>
+                      <div className="inline-flex items-center justify-end">
+                        <IconButton
+                          type="button"
+                          variant="edit"
+                          icon={Pencil}
+                          label={`Editar ${prod.nombre}`}
+                          onClick={() => handleEdit(prod)}
+                        />
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -476,6 +536,21 @@ export default function ProductosPage() {
           </table>
         </div>
       </div>
+      <ConfirmDialog
+        open={Boolean(estadoTarget)}
+        title="Desactivar producto"
+        message={
+          estadoTarget
+            ? `«${estadoTarget.nombre}» dejará de estar activo. Podrás activarlo de nuevo cuando quieras.`
+            : ''
+        }
+        confirmLabel="Desactivar"
+        loading={Boolean(
+          estadoTarget && updatingEstadoId === estadoTarget.id_producto,
+        )}
+        onCancel={() => setEstadoTarget(null)}
+        onConfirm={() => estadoTarget && updateEstado(estadoTarget, 'inactivo')}
+      />
     </div>
   );
 }

@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit, Trash2, Tag, Search, RefreshCw } from 'lucide-react';
+import { Plus, Pencil, Search, RefreshCw } from 'lucide-react';
 import Alert from '../components/Alert.jsx';
+import Button from '../components/Button.jsx';
+import ConfirmDialog from '../components/ConfirmDialog.jsx';
+import Field, { inputClass } from '../components/Field.jsx';
+import IconButton from '../components/IconButton.jsx';
+import Modal from '../components/Modal.jsx';
 import { categoriasApi } from '../api/categorias.js';
 
 export default function CategoriaPage() {
@@ -8,10 +13,15 @@ export default function CategoriaPage() {
   const [search, setSearch] = useState('');
   const [form, setForm] = useState({ id_categoria: null, nombre: '', descripcion: '', estado: 'activo' });
   const [isEditing, setIsEditing] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [touched, setTouched] = useState({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [formError, setFormError] = useState('');
   const [success, setSuccess] = useState('');
+  const [estadoTarget, setEstadoTarget] = useState(null);
+  const [updatingEstadoId, setUpdatingEstadoId] = useState(null);
 
   const fetchCategorias = useCallback(async () => {
     try {
@@ -33,18 +43,22 @@ export default function CategoriaPage() {
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
+    setFormError('');
   };
+
+  const nameError = !form.nombre.trim() ? 'El nombre de la categoría es obligatorio.' : '';
+  const visibleNameError = touched.nombre ? nameError : '';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.nombre.trim()) {
-      setError('El nombre de la categoría es obligatorio.');
+    setTouched({ nombre: true });
+    if (nameError) {
       return;
     }
 
     try {
       setSaving(true);
-      setError('');
+      setFormError('');
       setSuccess('');
 
       const payload = {
@@ -64,7 +78,7 @@ export default function CategoriaPage() {
       await fetchCategorias();
       resetForm();
     } catch (err) {
-      setError(err.message || 'Error al guardar la categoría.');
+      setFormError(err.message || 'Error al guardar la categoría.');
     } finally {
       setSaving(false);
     }
@@ -78,27 +92,54 @@ export default function CategoriaPage() {
       estado: cat.estado,
     });
     setIsEditing(true);
+    setFormOpen(true);
+    setTouched({});
+    setFormError('');
     setError('');
     setSuccess('');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('¿Estás seguro de eliminar esta categoría?')) return;
+  const handleNew = () => {
+    setForm({ id_categoria: null, nombre: '', descripcion: '', estado: 'activo' });
+    setIsEditing(false);
+    setFormOpen(true);
+    setTouched({});
+    setFormError('');
+    setError('');
+    setSuccess('');
+  };
+
+  const updateEstado = async (cat, estado) => {
+    setUpdatingEstadoId(cat.id_categoria);
+    setError('');
+    setSuccess('');
+
     try {
-      setError('');
-      setSuccess('');
-      await categoriasApi.remove(id);
-      setSuccess('Categoría eliminada con éxito.');
+      await categoriasApi.update(cat.id_categoria, {
+        nombre: cat.nombre,
+        descripcion: cat.descripcion || null,
+        estado,
+      });
+      setSuccess(
+        estado === 'activo'
+          ? 'Categoría activada con éxito.'
+          : 'Categoría desactivada con éxito.',
+      );
       await fetchCategorias();
     } catch (err) {
-      setError(err.message || 'Error al eliminar la categoría.');
+      setError(err.message);
+    } finally {
+      setUpdatingEstadoId(null);
+      setEstadoTarget(null);
     }
   };
 
   const resetForm = () => {
     setForm({ id_categoria: null, nombre: '', descripcion: '', estado: 'activo' });
     setIsEditing(false);
+    setFormOpen(false);
+    setTouched({});
+    setFormError('');
   };
 
   return (
@@ -108,20 +149,26 @@ export default function CategoriaPage() {
           <h1 className="font-display text-2xl font-bold text-ink">Categorías de Productos</h1>
           <p className="text-sm text-muted">Gestiona las clasificaciones del catálogo artesanal</p>
         </div>
-        <div className="relative w-full sm:w-64">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-          <input
-            type="text"
-            placeholder="Buscar categoría..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-xl border border-line bg-white pl-9 pr-4 py-2 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
-          />
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+            <input
+              type="text"
+              placeholder="Buscar categoría..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-xl border border-line bg-white pl-9 pr-4 py-2 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
+            />
+          </div>
+          <Button onClick={handleNew}>
+            <Plus className="h-4 w-4" />
+            Nueva categoría
+          </Button>
         </div>
       </div>
 
       {error && (
-        <Alert variant="danger">
+        <Alert type="error">
           <div className="flex items-center justify-between">
             <span>{error}</span>
             <button
@@ -136,76 +183,82 @@ export default function CategoriaPage() {
       )}
 
       {success && (
-        <Alert variant="success">
-          <span>{success}</span>
-        </Alert>
+        <Alert type="success">{success}</Alert>
       )}
 
-      <div className="rounded-2xl border border-line bg-paper p-6 shadow-soft">
-        <h2 className="mb-4 text-lg font-semibold text-ink flex items-center gap-2">
-          <Tag className="h-5 w-5 text-clay" />
-          {isEditing ? 'Editar Categoría' : 'Nueva Categoría'}
-        </h2>
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">Nombre *</label>
+      <Modal
+        open={formOpen}
+        onClose={resetForm}
+        title={isEditing ? 'Editar categoría' : 'Nueva categoría'}
+        footer={
+          <>
+            <Button variant="secondary" onClick={resetForm} disabled={saving}>
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              form="categoria-form"
+              loading={saving}
+              disabled={!form.nombre.trim()}
+            >
+              {isEditing ? 'Actualizar categoría' : 'Guardar categoría'}
+            </Button>
+          </>
+        }
+      >
+        <form
+          id="categoria-form"
+          onSubmit={handleSubmit}
+          className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+        >
+          {formError && (
+            <Alert type="error" className="sm:col-span-2">
+              {formError}
+            </Alert>
+          )}
+          <Field label="Nombre *" htmlFor="categoria-nombre" error={visibleNameError}>
             <input
+              id="categoria-nombre"
               type="text"
               name="nombre"
               value={form.nombre}
               onChange={handleChange}
-              required
+              onBlur={() => setTouched((prev) => ({ ...prev, nombre: true }))}
               maxLength={50}
               placeholder="Ej. Guayaberas"
-              className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
+              className={inputClass(visibleNameError)}
             />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">Descripción</label>
+          </Field>
+          <Field
+            label="Descripción"
+            htmlFor="categoria-descripcion"
+            className="sm:col-span-2"
+          >
             <input
+              id="categoria-descripcion"
               type="text"
               name="descripcion"
               value={form.descripcion}
               onChange={handleChange}
               maxLength={150}
               placeholder="Breve descripción..."
-              className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
+              className={inputClass()}
             />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">Estado</label>
+          </Field>
+          <Field label="Estado" htmlFor="categoria-estado">
             <select
+              id="categoria-estado"
               name="estado"
               value={form.estado}
               onChange={handleChange}
-              className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
+              className={inputClass()}
             >
               <option value="activo">Activo</option>
               <option value="inactivo">Inactivo</option>
             </select>
-          </div>
-          <div className="md:col-span-3 flex justify-end gap-3 pt-2">
-            {isEditing && (
-              <button
-                type="button"
-                onClick={resetForm}
-                disabled={saving}
-                className="rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-semibold text-muted transition hover:bg-sand"
-              >
-                Cancelar
-              </button>
-            )}
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex items-center gap-2 rounded-xl bg-clay px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-clay/90 disabled:opacity-50"
-            >
-              <Plus className="h-4 w-4" />
-              {saving ? 'Guardando...' : isEditing ? 'Actualizar Categoría' : 'Guardar Categoría'}
-            </button>
-          </div>
+          </Field>
         </form>
-      </div>
+      </Modal>
 
       <div className="rounded-2xl border border-line bg-paper shadow-soft overflow-hidden">
         <div className="overflow-x-auto">
@@ -239,25 +292,35 @@ export default function CategoriaPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-ink">{cat.nombre}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-muted">{cat.descripcion || 'Sin descripción'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                        cat.estado === 'activo' ? 'bg-forest/10 text-forest' : 'bg-red-100 text-red-700'
-                      }`}>
-                        {cat.estado}
-                      </span>
+                      <select
+                        value={cat.estado}
+                        aria-label={`Estado de ${cat.nombre}`}
+                        disabled={updatingEstadoId === cat.id_categoria}
+                        onChange={(event) =>
+                          event.target.value === 'inactivo'
+                            ? setEstadoTarget(cat)
+                            : updateEstado(cat, 'activo')
+                        }
+                        className={`inline-block align-middle rounded-full border border-transparent px-3 py-1 text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clay disabled:cursor-not-allowed disabled:opacity-60 ${
+                          cat.estado === 'activo'
+                            ? 'bg-forest/10 text-forest'
+                            : 'bg-red-100 text-red-700'
+                        }`}
+                      >
+                        <option value="activo">Activo</option>
+                        <option value="inactivo">Inactivo</option>
+                      </select>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => handleEdit(cat)}
-                        className="text-clay hover:underline mr-4 inline-flex items-center gap-1"
-                      >
-                        <Edit className="h-4 w-4" /> Editar
-                      </button>
-                      <button
-                        onClick={() => handleDelete(cat.id_categoria)}
-                        className="text-red-600 hover:underline inline-flex items-center gap-1"
-                      >
-                        <Trash2 className="h-4 w-4" /> Eliminar
-                      </button>
+                      <div className="inline-flex items-center justify-end">
+                        <IconButton
+                          type="button"
+                          variant="edit"
+                          icon={Pencil}
+                          label={`Editar ${cat.nombre}`}
+                          onClick={() => handleEdit(cat)}
+                        />
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -266,6 +329,22 @@ export default function CategoriaPage() {
           </table>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={Boolean(estadoTarget)}
+        title="Desactivar categoría"
+        message={
+          estadoTarget
+            ? `«${estadoTarget.nombre}» dejará de estar activa. Podrás activarla de nuevo cuando quieras.`
+            : ''
+        }
+        confirmLabel="Desactivar"
+        loading={Boolean(
+          estadoTarget && updatingEstadoId === estadoTarget.id_categoria,
+        )}
+        onCancel={() => setEstadoTarget(null)}
+        onConfirm={() => estadoTarget && updateEstado(estadoTarget, 'inactivo')}
+      />
     </div>
   );
 }

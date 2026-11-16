@@ -74,7 +74,6 @@ const EMPTY_FORM = {
   observaciones: '',
   productos: [],
   servicios: [],
-  cobrar_ahora: true,
   pago_inicial: {
     monto: '',
     metodo_pago: 'efectivo',
@@ -176,12 +175,10 @@ function TotalsPanel({ totals }) {
           <dt className="text-muted">Anticipo requerido (50%)</dt>
           <dd className="font-semibold text-ink">{formatMoney(totals.anticipo)}</dd>
         </div>
-        {totals.cobrarAhora && (
-          <div className="flex items-center justify-between gap-3">
-            <dt className="text-muted">Saldo después del pago inicial</dt>
-            <dd className="font-semibold text-ink">{formatMoney(totals.saldoDespues)}</dd>
-          </div>
-        )}
+        <div className="flex items-center justify-between gap-3">
+          <dt className="text-muted">Saldo después del pago inicial</dt>
+          <dd className="font-semibold text-ink">{formatMoney(totals.saldoDespues)}</dd>
+        </div>
       </dl>
     </div>
   );
@@ -220,6 +217,7 @@ export default function PedidosPage() {
   const [saving, setSaving] = useState(false);
   const [cajaAbierta, setCajaAbierta] = useState(null);
   const [checkingCaja, setCheckingCaja] = useState(false);
+  const [createPagoTouched, setCreatePagoTouched] = useState({});
 
   const [detailTarget, setDetailTarget] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -442,9 +440,7 @@ export default function PedidosPage() {
         : Number(createForm.costo_envio || 0);
     const total = Math.max(subtotal - descuento + costoEnvio, 0);
     const anticipo = Math.ceil((total * ANTICIPO_PORCENTAJE) / 100);
-    const montoInicial = createForm.cobrar_ahora
-      ? Number(createForm.pago_inicial.monto || 0)
-      : 0;
+    const montoInicial = Number(createForm.pago_inicial.monto || 0);
 
     return {
       productosDetalle,
@@ -458,9 +454,44 @@ export default function PedidosPage() {
       anticipo,
       montoInicial,
       saldoDespues: Math.max(total - montoInicial, 0),
-      cobrarAhora: createForm.cobrar_ahora,
     };
   }, [createForm, inventario]);
+
+  const createPagoErrors = {};
+  if (totals.total > 0) {
+    const monto = createForm.pago_inicial.monto;
+    const montoNumber = Number(monto);
+
+    if (!monto) {
+      createPagoErrors.monto = 'El monto del anticipo es obligatorio.';
+    } else if (!/^\d+$/.test(monto)) {
+      createPagoErrors.monto = 'Ingresa un monto entero usando solo dígitos.';
+    } else if (montoNumber > totals.total) {
+      createPagoErrors.monto =
+        `El monto no puede exceder el total de ${formatMoney(totals.total)}.`;
+    } else if (montoNumber < totals.anticipo && montoNumber < totals.total) {
+      createPagoErrors.monto =
+        `El anticipo mínimo es ${formatMoney(totals.anticipo)} o puedes liquidar el total.`;
+    }
+
+    if (
+      createForm.pago_inicial.metodo_pago === 'transferencia' &&
+      !createForm.pago_inicial.referencia.trim()
+    ) {
+      createPagoErrors.referencia =
+        'La referencia es obligatoria para transferencias.';
+    }
+
+    if (!createForm.pago_inicial.id_empleado) {
+      createPagoErrors.id_empleado = 'Selecciona al empleado que recibe el pago.';
+    }
+  }
+  const visibleCreatePagoErrors = Object.fromEntries(
+    Object.entries(createPagoErrors).filter(
+      ([field]) => createPagoTouched[field],
+    ),
+  );
+  const hasCreatePagoErrors = Object.values(createPagoErrors).some(Boolean);
 
   const productosDisponibles = useMemo(
     () =>
@@ -488,6 +519,7 @@ export default function PedidosPage() {
       },
     });
     setCreateError('');
+    setCreatePagoTouched({});
     setCreateOpen(true);
   }
 
@@ -534,17 +566,6 @@ export default function PedidosPage() {
       pago_inicial: {
         ...current.pago_inicial,
         [field]: value,
-      },
-    }));
-  }
-
-  function handleCobrarAhoraChange(checked) {
-    setCreateForm((current) => ({
-      ...current,
-      cobrar_ahora: checked,
-      pago_inicial: {
-        ...current.pago_inicial,
-        monto: checked ? current.pago_inicial.monto : '',
       },
     }));
   }
@@ -699,37 +720,22 @@ export default function PedidosPage() {
     }
 
     let pagoInicial = null;
-    if (createForm.cobrar_ahora && totals.total > 0) {
-      const monto = Number(
-        createForm.pago_inicial.monto === ''
-          ? totals.anticipo
-          : createForm.pago_inicial.monto,
-      );
-
-      if (!Number.isFinite(monto) || monto <= 0) {
-        setCreateError('Captura el monto del pago inicial.');
+    if (totals.total > 0) {
+      if (hasCreatePagoErrors) {
+        setCreatePagoTouched({
+          monto: true,
+          referencia: createForm.pago_inicial.metodo_pago === 'transferencia',
+          id_empleado: true,
+        });
         return;
       }
 
-      if (monto < totals.anticipo && monto < totals.total) {
-        setCreateError(
-          `El anticipo mínimo es ${formatMoney(totals.anticipo)}. Si no vas a cobrar ahora, desmarca la opción.`,
-        );
-        return;
-      }
-
-      if (monto > totals.total) {
-        setCreateError('El pago inicial no puede exceder el total del pedido.');
-        return;
-      }
-
+      const monto = Number(createForm.pago_inicial.monto);
       pagoInicial = {
         monto,
         metodo_pago: createForm.pago_inicial.metodo_pago,
         referencia: createForm.pago_inicial.referencia.trim() || null,
-        id_empleado: Number(
-          createForm.pago_inicial.id_empleado || createForm.id_empleado,
-        ),
+        id_empleado: Number(createForm.pago_inicial.id_empleado),
       };
     }
 
@@ -1340,7 +1346,16 @@ export default function PedidosPage() {
             >
               Cancelar
             </Button>
-            <Button type="submit" form="form-nuevo-pedido" loading={saving}>
+            <Button
+              type="submit"
+              form="form-nuevo-pedido"
+              loading={saving}
+              disabled={
+                checkingCaja ||
+                !cajaAbierta ||
+                (totals.total > 0 && hasCreatePagoErrors)
+              }
+            >
               Crear pedido
             </Button>
           </>
@@ -1796,119 +1811,137 @@ export default function PedidosPage() {
 
           <section className="space-y-4">
             <h3 className="font-display text-lg font-semibold text-ink">Pago inicial</h3>
+            <p className="text-sm text-muted">
+              El anticipo del 50% es obligatorio; también puedes liquidar el total.
+            </p>
 
-            <label className="flex items-start gap-3 rounded-xl border border-line p-3 text-sm">
-              <input
-                type="checkbox"
-                className="mt-1 h-4 w-4 rounded border-line text-clay focus:ring-clay"
-                checked={createForm.cobrar_ahora}
-                onChange={(event) => handleCobrarAhoraChange(event.target.checked)}
-              />
-              <span>
-                <span className="block font-semibold text-ink">Registrar pago ahora</span>
-                <span className="block text-muted">
-                  Puedes cobrar el anticipo del 50% o liquidar el total. Si no cobras ahora,
-                  el pedido queda pendiente y podrás registrarlo después en Pagos.
-                </span>
-              </span>
-            </label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                label="Monto"
+                htmlFor="pedido-pago-monto"
+                hint={`Anticipo mínimo: ${formatMoney(totals.anticipo)}`}
+                error={visibleCreatePagoErrors.monto}
+              >
+                <input
+                  id="pedido-pago-monto"
+                  type="text"
+                  inputMode="numeric"
+                  className={inputClass(visibleCreatePagoErrors.monto)}
+                  value={createForm.pago_inicial.monto}
+                  onChange={(event) =>
+                    handlePagoInicialChange(
+                      'monto',
+                      event.target.value.replace(/\D/g, ''),
+                    )
+                  }
+                  onBlur={() =>
+                    setCreatePagoTouched((current) => ({ ...current, monto: true }))
+                  }
+                  placeholder={String(totals.anticipo)}
+                />
+              </Field>
 
-            {createForm.cobrar_ahora && (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field
-                  label="Monto"
-                  htmlFor="pedido-pago-monto"
-                  hint={`Anticipo mínimo: ${formatMoney(totals.anticipo)}`}
+              <Field label="Método de pago" htmlFor="pedido-pago-metodo">
+                <select
+                  id="pedido-pago-metodo"
+                  className={inputClass()}
+                  value={createForm.pago_inicial.metodo_pago}
+                  onChange={(event) =>
+                    handlePagoInicialChange('metodo_pago', event.target.value)
+                  }
                 >
-                  <input
-                    id="pedido-pago-monto"
-                    type="number"
-                    min="0"
-                    step="1"
-                    className={inputClass()}
-                    value={createForm.pago_inicial.monto}
-                    onChange={(event) =>
-                      handlePagoInicialChange('monto', event.target.value)
-                    }
-                    placeholder={String(totals.anticipo)}
-                  />
-                </Field>
+                  <option value="efectivo">Efectivo</option>
+                  <option value="transferencia">Transferencia</option>
+                </select>
+              </Field>
 
-                <Field label="Método de pago" htmlFor="pedido-pago-metodo">
-                  <select
-                    id="pedido-pago-metodo"
-                    className={inputClass()}
-                    value={createForm.pago_inicial.metodo_pago}
-                    onChange={(event) =>
-                      handlePagoInicialChange('metodo_pago', event.target.value)
-                    }
-                  >
-                    <option value="efectivo">Efectivo</option>
-                    <option value="transferencia">Transferencia</option>
-                  </select>
-                </Field>
+              <Field
+                label="Referencia"
+                htmlFor="pedido-pago-referencia"
+                error={visibleCreatePagoErrors.referencia}
+              >
+                <input
+                  id="pedido-pago-referencia"
+                  type="text"
+                  maxLength={50}
+                  className={inputClass(visibleCreatePagoErrors.referencia)}
+                  value={createForm.pago_inicial.referencia}
+                  onChange={(event) =>
+                    handlePagoInicialChange('referencia', event.target.value)
+                  }
+                  onBlur={() =>
+                    setCreatePagoTouched((current) => ({
+                      ...current,
+                      referencia: true,
+                    }))
+                  }
+                  placeholder="Folio o referencia de transferencia"
+                />
+              </Field>
 
-                <Field label="Referencia" htmlFor="pedido-pago-referencia">
-                  <input
-                    id="pedido-pago-referencia"
-                    type="text"
-                    maxLength={50}
-                    className={inputClass()}
-                    value={createForm.pago_inicial.referencia}
-                    onChange={(event) =>
-                      handlePagoInicialChange('referencia', event.target.value)
-                    }
-                    placeholder="Folio o referencia de transferencia"
-                  />
-                </Field>
+              <Field
+                label="Empleado que recibe"
+                htmlFor="pedido-pago-empleado"
+                error={visibleCreatePagoErrors.id_empleado}
+              >
+                <select
+                  id="pedido-pago-empleado"
+                  className={inputClass(visibleCreatePagoErrors.id_empleado)}
+                  value={createForm.pago_inicial.id_empleado}
+                  onChange={(event) =>
+                    handlePagoInicialChange('id_empleado', event.target.value)
+                  }
+                  onBlur={() =>
+                    setCreatePagoTouched((current) => ({
+                      ...current,
+                      id_empleado: true,
+                    }))
+                  }
+                >
+                  <option value="">Selecciona quién recibe</option>
+                  {empleados.map((empleado) => (
+                    <option key={empleado.id_empleado} value={empleado.id_empleado}>
+                      {empleado.nombre} {empleado.apellido_paterno}
+                    </option>
+                  ))}
+                </select>
+              </Field>
 
-                <Field label="Empleado que recibe" htmlFor="pedido-pago-empleado">
-                  <select
-                    id="pedido-pago-empleado"
-                    className={inputClass()}
-                    value={createForm.pago_inicial.id_empleado}
-                    onChange={(event) =>
-                      handlePagoInicialChange('id_empleado', event.target.value)
-                    }
-                  >
-                    {empleados.map((empleado) => (
-                      <option key={empleado.id_empleado} value={empleado.id_empleado}>
-                        {empleado.nombre} {empleado.apellido_paterno}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-
-                <div className="flex flex-wrap items-end gap-2 sm:col-span-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => handlePagoInicialChange('monto', String(totals.anticipo))}
-                  >
-                    Usar anticipo 50%
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => handlePagoInicialChange('monto', String(totals.total))}
-                  >
-                    Liquidar total
-                  </Button>
-                </div>
+              <div className="flex flex-wrap items-end gap-2 sm:col-span-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    handlePagoInicialChange('monto', String(totals.anticipo));
+                    setCreatePagoTouched((current) => ({ ...current, monto: true }));
+                  }}
+                >
+                  Usar anticipo 50%
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    handlePagoInicialChange('monto', String(totals.total));
+                    setCreatePagoTouched((current) => ({ ...current, monto: true }));
+                  }}
+                >
+                  Liquidar total
+                </Button>
               </div>
-            )}
+            </div>
 
             {checkingCaja ? (
               <p className="text-xs text-muted">Verificando caja abierta…</p>
-            ) : createForm.cobrar_ahora && !cajaAbierta ? (
+            ) : !cajaAbierta ? (
               <Alert>
                 <p className="font-semibold">El empleado no tiene una caja abierta.</p>
                 <p className="mt-1">
-                  Si vas a cobrar ahora, abre una caja en{' '}
+                  Abre una caja en{' '}
                   <Link to="/caja" className="font-semibold underline">
                     Corte de caja
                   </Link>
-                  . También puedes desmarcar “Registrar pago ahora” y cobrar después.
+                  {' '}para registrar el anticipo.
                 </p>
               </Alert>
             ) : cajaAbierta ? (
