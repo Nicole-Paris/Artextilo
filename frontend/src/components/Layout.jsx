@@ -23,11 +23,13 @@ import {
   Wallet,
   RotateCcw,
   LogOut,
+  User,
   Settings,
 } from 'lucide-react';
 
 import { cn } from '../lib/cn.js';
 import { useDialogFocus } from '../hooks/useDialogFocus.js';
+import Modal from './Modal.jsx';
 
 const navigation = [
   { to: '/', label: 'Inicio', icon: LayoutDashboard, end: true },
@@ -122,8 +124,12 @@ function SidebarContent({ onNavigate }) {
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [empleado, setEmpleado] = useState(null);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const mobileAsideRef = useRef(null);
+  const accountMenuRef = useRef(null);
+  const accountButtonRef = useRef(null);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -156,7 +162,34 @@ export default function Layout() {
 
   useEffect(() => {
     setSidebarOpen(false);
+    setAccountMenuOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (!accountMenuOpen) return undefined;
+
+    function handlePointerDown(event) {
+      if (!accountMenuRef.current?.contains(event.target)) {
+        setAccountMenuOpen(false);
+      }
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setAccountMenuOpen(false);
+        accountButtonRef.current?.focus();
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [accountMenuOpen]);
 
   useEffect(() => {
     const section =
@@ -170,6 +203,22 @@ export default function Layout() {
     : 'Usuario';
 
   const inicial = empleado?.nombre?.charAt(0)?.toUpperCase() || 'U';
+  const nombrePerfil = empleado
+    ? [
+      empleado.nombre,
+      empleado.apellido_paterno,
+      empleado.apellido_materno,
+    ].filter(Boolean).join(' ')
+    : '';
+  const datosPerfil = [
+    ['Nombre completo', nombrePerfil],
+    ['Correo', empleado?.correo],
+    ['Teléfono', empleado?.telefono],
+    ['Rol', empleado?.rol],
+    ['Sucursal', empleado?.sucursal],
+    ['Horario de entrada', empleado?.horario_entrada],
+    ['Horario de salida', empleado?.horario_salida],
+  ].filter(([, value]) => value != null && String(value).trim() !== '');
 
   return (
     <div className="min-h-screen bg-cream">
@@ -248,24 +297,70 @@ export default function Layout() {
               </p>
             </div>
 
-            <div
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sand text-sm font-bold text-clay"
-              aria-label={`Usuario ${nombreCompleto}`}
-            >
-              {inicial}
-            </div>
+            <div ref={accountMenuRef} className="relative">
+              <button
+                ref={accountButtonRef}
+                type="button"
+                onClick={() => setAccountMenuOpen((open) => !open)}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sand text-sm font-bold text-clay focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clay"
+                aria-haspopup="menu"
+                aria-expanded={accountMenuOpen}
+                aria-label="Abrir menú de la cuenta"
+              >
+                {inicial}
+              </button>
 
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="flex h-9 items-center gap-2 rounded-xl border border-line px-3 text-sm font-semibold text-muted-strong transition hover:border-clay hover:bg-sand hover:text-clay focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clay"
-              title="Cerrar sesión"
-            >
-              <LogOut className="h-4 w-4" aria-hidden="true" />
-              <span className="hidden md:inline">
-                Salir
-              </span>
-            </button>
+              {accountMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-full z-50 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-2xl border border-line bg-paper p-3 shadow-soft"
+                >
+                  <div className="mb-2 rounded-xl bg-cream px-4 py-4 text-center">
+                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-sand text-xl font-bold text-clay">
+                      {inicial}
+                    </div>
+                    <p className="mt-3 break-words font-semibold text-ink">
+                      {nombreCompleto}
+                    </p>
+                    {empleado?.correo && (
+                      <p className="mt-1 break-all text-xs text-muted">
+                        {empleado.correo}
+                      </p>
+                    )}
+                    <p className="mt-1 text-xs text-muted">
+                      {empleado?.rol || 'Empleado'}
+                    </p>
+                  </div>
+
+                  <div className="space-y-1">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setAccountMenuOpen(false);
+                        setProfileOpen(true);
+                      }}
+                      className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-muted-strong transition hover:bg-sand hover:text-clay"
+                    >
+                      <User className="h-4 w-4" aria-hidden="true" />
+                      Ver perfil
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setAccountMenuOpen(false);
+                        handleLogout();
+                      }}
+                      className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-muted-strong transition hover:bg-sand hover:text-clay"
+                    >
+                      <LogOut className="h-4 w-4" aria-hidden="true" />
+                      Cerrar sesión
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
@@ -276,6 +371,33 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+
+      <Modal
+        open={profileOpen}
+        onClose={() => setProfileOpen(false)}
+        title="Mi perfil"
+        size="sm"
+        footer={
+          <button
+            type="button"
+            onClick={() => setProfileOpen(false)}
+            className="min-h-11 rounded-xl bg-clay px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-clay/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clay"
+          >
+            Cerrar
+          </button>
+        }
+      >
+        <dl className="space-y-4">
+          {datosPerfil.map(([label, value]) => (
+            <div key={label}>
+              <dt className="text-xs font-semibold text-muted">{label}</dt>
+              <dd className="mt-1 break-words text-sm font-medium text-ink">
+                {value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </Modal>
     </div>
   );
 }
