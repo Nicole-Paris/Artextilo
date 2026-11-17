@@ -5,6 +5,7 @@ import {
   ArrowUpRight,
   Banknote,
   Clock,
+  CreditCard,
   History,
   Landmark,
   Plus,
@@ -24,6 +25,7 @@ import { empleadosApi } from '../api/empleados.js';
 import { sucursalesApi } from '../api/sucursales.js';
 import { cn } from '../lib/cn.js';
 import { formatDateTime, formatMoney } from '../lib/format.js';
+import { canManageCaja, isCashier } from '../lib/roles.js';
 
 function EstadoCorteBadge({ estado }) {
   return (
@@ -85,7 +87,7 @@ function StatCard({ icon: Icon, label, value, hint }) {
   );
 }
 
-function CorteCard({ corte, onVer, onCerrar }) {
+function CorteCard({ corte, onVer, onCerrar, canClose }) {
   return (
     <article className="rounded-2xl border border-line bg-paper p-5 shadow-soft">
       <div className="flex items-start justify-between gap-3">
@@ -123,6 +125,12 @@ function CorteCard({ corte, onVer, onCerrar }) {
             {formatMoney(corte.total_transferencia)}
           </dd>
         </div>
+        <div className="rounded-xl bg-sand/70 p-3">
+          <dt className="text-xs text-muted">Tarjeta</dt>
+          <dd className="mt-1 font-semibold text-ink">
+            {formatMoney(corte.total_tarjeta)}
+          </dd>
+        </div>
       </dl>
 
       <p className="mt-3 flex items-center gap-1.5 text-xs text-muted">
@@ -134,9 +142,11 @@ function CorteCard({ corte, onVer, onCerrar }) {
         <Button variant="secondary" size="sm" onClick={() => onVer(corte)}>
           Ver detalle
         </Button>
-        <Button size="sm" onClick={() => onCerrar(corte)}>
-          Cerrar caja
-        </Button>
+        {canClose && (
+          <Button size="sm" onClick={() => onCerrar(corte)}>
+            Cerrar caja
+          </Button>
+        )}
       </div>
     </article>
   );
@@ -168,6 +178,17 @@ export default function CajaPage() {
   const [detailTarget, setDetailTarget] = useState(null);
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+
+  const currentEmployee = useMemo(() => {
+    try {
+      const raw = localStorage.getItem('artextilo_empleado');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const puedeGestionarCaja = canManageCaja(currentEmployee);
 
   const loadCortes = useCallback(async () => {
     setLoading(true);
@@ -222,6 +243,10 @@ export default function CajaPage() {
         (total, corte) => total + Number(corte.total_transferencia || 0),
         0,
       ),
+      tarjeta: abiertas.reduce(
+        (total, corte) => total + Number(corte.total_tarjeta || 0),
+        0,
+      ),
       esperado: abiertas.reduce(
         (total, corte) => total + Number(corte.saldo_esperado || 0),
         0,
@@ -231,9 +256,20 @@ export default function CajaPage() {
   );
 
   function abrirModalCaja() {
+    if (!puedeGestionarCaja) {
+      setError(
+        'Solo un administrador o supervisor/gerente puede abrir cajas.',
+      );
+      return;
+    }
+
     setError('');
     const empleado =
-      empleados.find((item) => item.rol === 'empleado') ?? empleados[0];
+      empleados.find((item) => isCashier(item)) ??
+      empleados.find(
+        (item) => item.id_empleado === currentEmployee?.id_empleado,
+      ) ??
+      empleados[0];
     setOpenForm({
       id_empleado: empleado ? String(empleado.id_empleado) : '',
       id_sucursal: empleado ? String(empleado.id_sucursal) : '',
@@ -266,6 +302,11 @@ export default function CajaPage() {
       return;
     }
 
+    if (!currentEmployee?.id_empleado) {
+      setError('No se encontró el usuario en sesión. Vuelve a iniciar sesión.');
+      return;
+    }
+
     try {
       setSavingOpen(true);
       setError('');
@@ -273,6 +314,7 @@ export default function CajaPage() {
       await cajaApi.abrir({
         id_empleado: Number(openForm.id_empleado),
         id_sucursal: Number(openForm.id_sucursal),
+        id_empleado_apertura: Number(currentEmployee.id_empleado),
         fondo_inicial: Number(openForm.fondo_inicial) || 0,
         descripcion: openForm.descripcion.trim() || null,
       });
@@ -287,6 +329,13 @@ export default function CajaPage() {
   }
 
   function abrirModalCierre(corte) {
+    if (!puedeGestionarCaja) {
+      setError(
+        'Solo un administrador o supervisor/gerente puede cerrar cajas.',
+      );
+      return;
+    }
+
     setError('');
     setCloseTarget(corte);
     setCloseForm({
@@ -303,12 +352,18 @@ export default function CajaPage() {
       return;
     }
 
+    if (!currentEmployee?.id_empleado) {
+      setError('No se encontró el usuario en sesión. Vuelve a iniciar sesión.');
+      return;
+    }
+
     try {
       setSavingClose(true);
       setError('');
       setSuccess('');
       await cajaApi.cerrar(closeTarget.id_corte_caja, {
         saldo_real: Number(closeForm.saldo_real),
+        id_empleado_cierre: Number(currentEmployee.id_empleado),
         descripcion: closeForm.descripcion.trim() || null,
       });
       setSuccess('Caja cerrada correctamente.');
@@ -346,7 +401,10 @@ export default function CajaPage() {
         title="Corte de caja"
         description="Abre turnos, consulta el efectivo y las transferencias del día, y cierra la caja con el saldo real."
       >
-        <Button onClick={abrirModalCaja} disabled={empleados.length === 0}>
+        <Button
+          onClick={abrirModalCaja}
+          disabled={empleados.length === 0 || !puedeGestionarCaja}
+        >
           <Plus className="h-4 w-4" aria-hidden="true" />
           Abrir caja
         </Button>
@@ -376,7 +434,16 @@ export default function CajaPage() {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {!puedeGestionarCaja && (
+        <div className="mb-5">
+          <Alert>
+            Tu rol no permite abrir ni cerrar cajas. Pide a un administrador o
+            supervisor/gerente que realice esta acción.
+          </Alert>
+        </div>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <StatCard
           icon={Wallet}
           label="Cajas abiertas"
@@ -394,6 +461,12 @@ export default function CajaPage() {
           label="Pagos por transferencia"
           value={formatMoney(stats.transferencia)}
           hint="Cobros por transferencia de cajas abiertas"
+        />
+        <StatCard
+          icon={CreditCard}
+          label="Pagos con tarjeta"
+          value={formatMoney(stats.tarjeta)}
+          hint="Cobros con tarjeta de cajas abiertas"
         />
         <StatCard
           icon={History}
@@ -454,7 +527,10 @@ export default function CajaPage() {
                   title="No hay cajas abiertas"
                   description="Abre un turno para empezar a registrar pagos y llevar el control del efectivo."
                   action={
-                    <Button onClick={abrirModalCaja} disabled={empleados.length === 0}>
+                    <Button
+                      onClick={abrirModalCaja}
+                      disabled={empleados.length === 0 || !puedeGestionarCaja}
+                    >
                       <Plus className="h-4 w-4" aria-hidden="true" />
                       Abrir primera caja
                     </Button>
@@ -469,6 +545,7 @@ export default function CajaPage() {
                     corte={corte}
                     onVer={abrirDetalle}
                     onCerrar={abrirModalCierre}
+                    canClose={puedeGestionarCaja}
                   />
                 ))}
               </div>
@@ -502,6 +579,7 @@ export default function CajaPage() {
                         <th className="px-4 py-3 font-semibold">Apertura / cierre</th>
                         <th className="px-4 py-3 text-right font-semibold">Efectivo</th>
                         <th className="px-4 py-3 text-right font-semibold">Transferencia</th>
+                        <th className="px-4 py-3 text-right font-semibold">Tarjeta</th>
                         <th className="px-4 py-3 text-right font-semibold">Esperado</th>
                         <th className="px-4 py-3 text-right font-semibold">Real</th>
                         <th className="px-4 py-3 text-right font-semibold">Diferencia</th>
@@ -525,6 +603,9 @@ export default function CajaPage() {
                           </td>
                           <td className="px-4 py-3 text-right text-ink">
                             {formatMoney(corte.total_transferencia)}
+                          </td>
+                          <td className="px-4 py-3 text-right text-ink">
+                            {formatMoney(corte.total_tarjeta)}
                           </td>
                           <td className="px-4 py-3 text-right text-ink">
                             {formatMoney(corte.saldo_esperado)}
@@ -570,6 +651,12 @@ export default function CajaPage() {
                           <dt className="text-xs text-muted">Transferencia</dt>
                           <dd className="font-semibold">
                             {formatMoney(corte.total_transferencia)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs text-muted">Tarjeta</dt>
+                          <dd className="font-semibold">
+                            {formatMoney(corte.total_tarjeta)}
                           </dd>
                         </div>
                         <div>
@@ -754,6 +841,12 @@ export default function CajaPage() {
                   </dd>
                 </div>
                 <div>
+                  <dt className="text-xs text-muted">Tarjeta</dt>
+                  <dd className="font-semibold">
+                    {formatMoney(closeTarget.total_tarjeta)}
+                  </dd>
+                </div>
+                <div>
                   <dt className="text-xs text-muted">Devoluciones</dt>
                   <dd className="font-semibold">
                     {formatMoney(closeTarget.total_devoluciones)}
@@ -869,6 +962,12 @@ export default function CajaPage() {
                 <dt className="text-xs text-muted">Transferencia</dt>
                 <dd className="mt-1 font-semibold">
                   {formatMoney(detail.total_transferencia)}
+                </dd>
+              </div>
+              <div className="rounded-xl bg-sand/70 p-3">
+                <dt className="text-xs text-muted">Tarjeta</dt>
+                <dd className="mt-1 font-semibold">
+                  {formatMoney(detail.total_tarjeta)}
                 </dd>
               </div>
               <div className="rounded-xl bg-sand/70 p-3">

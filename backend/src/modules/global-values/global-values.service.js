@@ -28,7 +28,7 @@ export async function listGlobalValues({
   archived = false,
 } = {}) {
   const params = [];
-  let sql = `${BASE_SELECT} WHERE ${scope(archived)}`;
+  let sql = `${BASE_SELECT} WHERE ${scope(archived)} AND tipo <> 'empresa'`;
 
   if (search) {
     sql += ' AND (nombre LIKE ? OR descripcion LIKE ? OR valor LIKE ?)';
@@ -65,33 +65,6 @@ export async function getGlobalValue(id, { includeArchived = false } = {}) {
   return rows[0];
 }
 
-export async function createGlobalValue(
-  { tipo, nombre, valor, descripcion },
-  userId = null,
-) {
-  const [existing] = await pool.execute(
-    'SELECT id_global_value, deleted_at FROM global_values WHERE LOWER(nombre) = LOWER(?) LIMIT 1',
-    [nombre],
-  );
-
-  if (existing.length > 0) {
-    throw ApiError.conflict(
-      existing[0].deleted_at
-        ? 'Ya existe un valor global eliminado con ese nombre. Puedes restaurarlo.'
-        : 'Ya existe un valor global con ese nombre',
-    );
-  }
-
-  const [result] = await pool.execute(
-    `INSERT INTO global_values
-      (tipo, nombre, valor, descripcion, created_by)
-     VALUES (?, ?, ?, ?, ?)`,
-    [tipo, nombre, valor, descripcion ?? null, userId || null],
-  );
-
-  return getGlobalValue(result.insertId);
-}
-
 export async function updateGlobalValue(
   id,
   { tipo, nombre, valor, descripcion },
@@ -121,38 +94,6 @@ export async function updateGlobalValue(
          updated_by = ?
      WHERE id_global_value = ? AND deleted_at IS NULL`,
     [tipo, nombre, valor, descripcion ?? null, userId || null, id],
-  );
-
-  return getGlobalValue(id);
-}
-
-export async function archiveGlobalValue(id, userId = null) {
-  await getGlobalValue(id);
-
-  await pool.execute(
-    `UPDATE global_values
-     SET deleted_at = NOW(), deleted_by = ?
-     WHERE id_global_value = ? AND deleted_at IS NULL`,
-    [userId || null, id],
-  );
-
-  return { id_global_value: id };
-}
-
-export async function restoreGlobalValue(id, userId = null) {
-  const globalValue = await getGlobalValue(id, { includeArchived: true });
-
-  if (globalValue.deleted_at === null) {
-    throw ApiError.conflict('El valor global ya está activo');
-  }
-
-  await pool.execute(
-    `UPDATE global_values
-     SET deleted_at = NULL,
-         deleted_by = NULL,
-         updated_by = ?
-     WHERE id_global_value = ?`,
-    [userId || null, id],
   );
 
   return getGlobalValue(id);

@@ -19,8 +19,8 @@ export const devolucionPayloadSchema = z.object({
     .number({ error: 'El monto debe ser un número entero mayor a cero' })
     .int('El monto debe ser un número entero mayor a cero')
     .positive('El monto debe ser un número entero mayor a cero'),
-  metodo: z.enum(['efectivo', 'transferencia'], {
-    error: 'El método debe ser efectivo o transferencia',
+  metodo: z.enum(['efectivo', 'transferencia', 'tarjeta'], {
+    error: 'El método debe ser efectivo, transferencia o tarjeta',
   }),
   motivo: z
     .string({ error: 'El motivo es obligatorio' })
@@ -37,7 +37,7 @@ export const devolucionPayloadSchema = z.object({
 
 export const devolucionesListQuerySchema = z.object({
   search: z.string().trim().optional(),
-  metodo: z.enum(['efectivo', 'transferencia']).optional(),
+  metodo: z.enum(['efectivo', 'transferencia', 'tarjeta']).optional(),
   id_sucursal: positiveId('La sucursal debe ser un ID entero positivo').optional(),
   desde: dateOnly.optional(),
   hasta: dateOnly.optional(),

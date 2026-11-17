@@ -29,8 +29,8 @@ export const pagoPayloadSchema = z.object({
     .number({ error: 'El monto es obligatorio' })
     .int('El monto debe ser un número entero')
     .positive('El monto debe ser mayor a cero'),
-  metodo_pago: z.enum(['efectivo', 'transferencia', 'credito'], {
-    error: 'El método de pago debe ser efectivo, transferencia o crédito',
+  metodo_pago: z.enum(['efectivo', 'transferencia', 'tarjeta', 'credito'], {
+    error: 'El método de pago debe ser efectivo, transferencia, tarjeta o crédito',
   }),
   referencia: optionalText(50, 'La referencia no puede exceder 50 caracteres'),
   concepto_pago: z
@@ -184,8 +184,8 @@ export const pedidoCancelPayloadSchema = z.object({
     .min(0, 'El monto de devolución no puede ser negativo')
     .default(0),
   metodo_devolucion: z
-    .enum(['efectivo', 'transferencia'], {
-      error: 'El método de devolución debe ser efectivo o transferencia',
+    .enum(['efectivo', 'transferencia', 'tarjeta'], {
+      error: 'El método de devolución debe ser efectivo, transferencia o tarjeta',
     })
     .default('efectivo'),
   id_empleado_autoriza: z.coerce

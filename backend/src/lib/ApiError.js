@@ -22,4 +22,7 @@ export class ApiError extends Error {
     return new ApiError(401, message);
   }
 
+  static forbidden(message = 'No tienes permisos para realizar esta acción') {
+    return new ApiError(403, message);
+  }
 }

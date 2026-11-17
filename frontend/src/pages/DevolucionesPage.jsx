@@ -24,11 +24,7 @@ const EMPTY_FORM = {
 };
 
 function nombreEmpleado(empleado) {
-  return [
-    empleado.nombre,
-    empleado.apellido_paterno,
-    empleado.apellido_materno,
-  ]
+  return [empleado.nombre, empleado.apellido_paterno]
     .filter(Boolean)
     .join(' ');
 }
@@ -52,7 +48,9 @@ function MetodoBadge({ metodo }) {
         'inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold capitalize',
         metodo === 'efectivo'
           ? 'bg-forest/10 text-forest'
-          : 'bg-sky-100 text-sky-800',
+          : metodo === 'tarjeta'
+            ? 'bg-violet-100 text-violet-800'
+            : 'bg-sky-100 text-sky-800',
       )}
     >
       {metodo}
@@ -412,6 +410,7 @@ export default function DevolucionesPage() {
               <option value="">Todos</option>
               <option value="efectivo">Efectivo</option>
               <option value="transferencia">Transferencia</option>
+              <option value="tarjeta">Tarjeta</option>
             </select>
           </Field>
 
@@ -718,6 +717,7 @@ export default function DevolucionesPage() {
               >
                 <option value="efectivo">Efectivo</option>
                 <option value="transferencia">Transferencia</option>
+                <option value="tarjeta">Tarjeta</option>
               </select>
             </Field>
 

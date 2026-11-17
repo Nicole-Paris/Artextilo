@@ -31,6 +31,13 @@ const BASE_CORTE_SELECT = `
       FROM pago p
       WHERE p.id_corte_caja = cc.id_corte_caja
         AND p.deleted_at IS NULL
+        AND p.metodo_pago = 'tarjeta'
+    ), 0) AS total_tarjeta,
+    COALESCE((
+      SELECT SUM(p.monto)
+      FROM pago p
+      WHERE p.id_corte_caja = cc.id_corte_caja
+        AND p.deleted_at IS NULL
         AND p.metodo_pago = 'credito'
     ), 0) AS total_credito,
     COALESCE((
@@ -61,10 +68,10 @@ const BASE_CORTE_SELECT = `
     cc.descripcion,
     cc.created_at,
     cc.updated_at,
-    CONCAT_WS(' ', e.nombre, e.apellido_paterno, e.apellido_materno) AS empleado_nombre,
+    CONCAT_WS(' ', e.nombre, e.apellido_paterno) AS empleado_nombre,
     s.nombre AS sucursal_nombre,
-    CONCAT_WS(' ', ea.nombre, ea.apellido_paterno, ea.apellido_materno) AS apertura_nombre,
-    CONCAT_WS(' ', ec.nombre, ec.apellido_paterno, ec.apellido_materno) AS cierre_nombre
+    CONCAT_WS(' ', ea.nombre, ea.apellido_paterno) AS apertura_nombre,
+    CONCAT_WS(' ', ec.nombre, ec.apellido_paterno) AS cierre_nombre
   FROM corte_caja cc
   INNER JOIN empleado e ON e.id_empleado = cc.id_empleado
   INNER JOIN sucursal s ON s.id_sucursal = cc.id_sucursal
@@ -76,6 +83,7 @@ const CORTE_NUMERIC_FIELDS = [
   'fondo_inicial',
   'total_efectivo',
   'total_transferencia',
+  'total_tarjeta',
   'total_credito',
   'total_devoluciones',
   'saldo_esperado',
@@ -97,9 +105,11 @@ function normalizeCorte(row) {
 
 async function getEmpleadoActivo(connection, id_empleado) {
   const [rows] = await connection.execute(
-    `SELECT id_empleado, id_sucursal, estado, deleted_at
-     FROM empleado
-     WHERE id_empleado = ? AND deleted_at IS NULL
+    `SELECT e.id_empleado, e.id_sucursal, e.estado, e.deleted_at,
+            r.nombre AS rol
+     FROM empleado e
+     INNER JOIN rol r ON r.id_rol = e.id_rol
+     WHERE e.id_empleado = ? AND e.deleted_at IS NULL
      LIMIT 1`,
     [id_empleado],
   );
@@ -113,6 +123,32 @@ async function getEmpleadoActivo(connection, id_empleado) {
   }
 
   return rows[0];
+}
+
+function normalizarRol(empleado) {
+  return String(empleado.rol || '').trim().toLowerCase();
+}
+
+function puedeGestionarCaja(empleado) {
+  return ['administrador', 'supervisor', 'gerente'].includes(normalizarRol(empleado));
+}
+
+function assertPuedeGestionarCaja(empleado, accion, id_sucursal = null) {
+  if (!puedeGestionarCaja(empleado)) {
+    throw ApiError.forbidden(
+      `Solo un administrador o supervisor/gerente puede ${accion} la caja.`,
+    );
+  }
+
+  if (
+    id_sucursal &&
+    normalizarRol(empleado) !== 'administrador' &&
+    Number(empleado.id_sucursal) !== Number(id_sucursal)
+  ) {
+    throw ApiError.forbidden(
+      `Solo puedes ${accion} cajas de tu propia sucursal.`,
+    );
+  }
 }
 
 async function getSucursalActiva(connection, id_sucursal) {
@@ -221,8 +257,8 @@ export async function getCorte(id) {
        p.concepto_pago,
        p.referencia,
        CONCAT('P-', LPAD(p.id_pedido, 4, '0')) AS folio_pedido,
-       CONCAT_WS(' ', c.nombre, c.apellido_paterno, c.apellido_materno) AS cliente_nombre,
-       CONCAT_WS(' ', e.nombre, e.apellido_paterno, e.apellido_materno) AS empleado_nombre
+       CONCAT_WS(' ', c.nombre, c.apellido_paterno) AS cliente_nombre,
+       CONCAT_WS(' ', e.nombre, e.apellido_paterno) AS empleado_nombre
      FROM pago p
      INNER JOIN pedido pe ON pe.id_pedido = p.id_pedido
      INNER JOIN cliente c ON c.id_cliente = pe.id_cliente
@@ -241,7 +277,7 @@ export async function getCorte(id) {
        d.motivo,
        d.fecha_hora,
        CONCAT('P-', LPAD(d.id_pedido, 4, '0')) AS folio_pedido,
-       CONCAT_WS(' ', e.nombre, e.apellido_paterno, e.apellido_materno) AS autoriza_nombre
+       CONCAT_WS(' ', e.nombre, e.apellido_paterno) AS autoriza_nombre
      FROM devolucion d
      INNER JOIN empleado e ON e.id_empleado = d.id_empleado_autoriza
      WHERE d.id_corte_caja = ? AND d.deleted_at IS NULL
@@ -297,7 +333,8 @@ export async function openCorte(payload, userId = null) {
     }
 
     const empleadoApertura = id_empleado_apertura || id_empleado;
-    await getEmpleadoActivo(connection, empleadoApertura);
+    const actorApertura = await getEmpleadoActivo(connection, empleadoApertura);
+    assertPuedeGestionarCaja(actorApertura, 'abrir', id_sucursal);
 
     const openCorte = await findOpenCorte(connection, id_empleado);
     if (openCorte) {
@@ -364,6 +401,7 @@ export async function closeCorte(id, payload, userId = null) {
       `SELECT
          COALESCE(SUM(CASE WHEN metodo_pago = 'efectivo' THEN monto ELSE 0 END), 0) AS total_efectivo,
          COALESCE(SUM(CASE WHEN metodo_pago = 'transferencia' THEN monto ELSE 0 END), 0) AS total_transferencia,
+         COALESCE(SUM(CASE WHEN metodo_pago = 'tarjeta' THEN monto ELSE 0 END), 0) AS total_tarjeta,
          COALESCE(SUM(CASE WHEN metodo_pago = 'credito' THEN monto ELSE 0 END), 0) AS total_credito
        FROM pago
        WHERE id_corte_caja = ? AND deleted_at IS NULL`,
@@ -381,6 +419,7 @@ export async function closeCorte(id, payload, userId = null) {
 
     const totalEfectivo = Number(pagos[0].total_efectivo);
     const totalTransferencia = Number(pagos[0].total_transferencia);
+    const totalTarjeta = Number(pagos[0].total_tarjeta);
     const totalCredito = Number(pagos[0].total_credito);
     const totalDevoluciones = Number(devoluciones[0].total_devoluciones);
     const totalDevolucionesEfectivo = Number(
@@ -390,8 +429,8 @@ export async function closeCorte(id, payload, userId = null) {
     const saldoEsperado = fondoInicial + totalEfectivo - totalDevolucionesEfectivo;
     const diferenciaSaldo = Number(saldo_real) - saldoEsperado;
     const empleadoCierre = id_empleado_cierre || corte.id_empleado;
-
-    await getEmpleadoActivo(connection, empleadoCierre);
+    const actorCierre = await getEmpleadoActivo(connection, empleadoCierre);
+    assertPuedeGestionarCaja(actorCierre, 'cerrar', corte.id_sucursal);
 
     await connection.execute(
       `UPDATE corte_caja
@@ -400,6 +439,7 @@ export async function closeCorte(id, payload, userId = null) {
            id_empleado_cierre = ?,
            total_efectivo = ?,
            total_transferencia = ?,
+           total_tarjeta = ?,
            total_credito = ?,
            total_devoluciones = ?,
            saldo_esperado = ?,
@@ -412,6 +452,7 @@ export async function closeCorte(id, payload, userId = null) {
         empleadoCierre,
         totalEfectivo,
         totalTransferencia,
+        totalTarjeta,
         totalCredito,
         totalDevoluciones,
         saldoEsperado,

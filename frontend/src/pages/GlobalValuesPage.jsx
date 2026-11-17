@@ -1,457 +1,318 @@
-
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  Plus,
-  Edit,
-  Trash2,
-  Settings,
-  Search,
-  RefreshCw,
-  RotateCcw,
-} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { RefreshCw, Save, Settings } from 'lucide-react';
 
 import Alert from '../components/Alert.jsx';
+import Button from '../components/Button.jsx';
+import Field, { inputClass } from '../components/Field.jsx';
+import PageHeader from '../components/PageHeader.jsx';
 import { globalValuesApi } from '../api/global-values.js';
+import { cn } from '../lib/cn.js';
+
+const TIPO_ORDEN = ['general', 'ventas', 'inventario', 'seguridad'];
+
+const TIPO_LABELS = {
+  general: 'General',
+  ventas: 'Ventas',
+  inventario: 'Inventario',
+  seguridad: 'Seguridad',
+};
+
+const TIPO_DESCRIPTIONS = {
+  general: 'Configuración base de la tienda.',
+  ventas: 'Reglas de anticipos, mayoreo y descuentos.',
+  inventario: 'Parámetros para el control de existencias.',
+  seguridad: 'Límites de acceso y recuperación de cuentas.',
+};
+
+const VALUE_LABELS = {
+  moneda: 'Moneda',
+  stock_minimo_default: 'Stock mínimo por defecto',
+  codigo_recuperacion_minutos: 'Vigencia del código de recuperación',
+  intentos_login_max: 'Intentos de inicio de sesión permitidos',
+  anticipo_porcentaje: 'Porcentaje de anticipo',
+  descuento_mayoreo_porcentaje: 'Descuento por mayoreo',
+  mayoreo_minimo_piezas: 'Piezas mínimas para mayoreo',
+};
+
+const VALUE_UNITS = {
+  codigo_recuperacion_minutos: 'min',
+  intentos_login_max: 'intentos',
+  anticipo_porcentaje: '%',
+  descuento_mayoreo_porcentaje: '%',
+  mayoreo_minimo_piezas: 'pzas',
+};
+
+const NUMERIC_VALUES = new Set([
+  'stock_minimo_default',
+  'codigo_recuperacion_minutos',
+  'intentos_login_max',
+  'anticipo_porcentaje',
+  'descuento_mayoreo_porcentaje',
+  'mayoreo_minimo_piezas',
+]);
+
+const PERCENTAGE_VALUES = new Set([
+  'anticipo_porcentaje',
+  'descuento_mayoreo_porcentaje',
+]);
+
+function valueLabel(item) {
+  return (
+    VALUE_LABELS[item.nombre] ??
+    item.nombre
+      .replaceAll('_', ' ')
+      .replace(/^\w/, (letter) => letter.toUpperCase())
+  );
+}
 
 export default function GlobalValuesPage() {
   const [values, setValues] = useState([]);
-  const [search, setSearch] = useState('');
-  const [tipoFilter, setTipoFilter] = useState('');
-  const [showArchived, setShowArchived] = useState(false);
-
-  const [form, setForm] = useState({
-    id_global_value: null,
-    tipo: '',
-    nombre: '',
-    valor: '',
-    descripcion: '',
-  });
-
-  const [isEditing, setIsEditing] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [draft, setDraft] = useState({});
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const fetchValues = useCallback(async () => {
+  const loadValues = useCallback(async () => {
+    setLoading(true);
+    setError('');
+
     try {
-      setLoading(true);
-      setError('');
-
-      const res = await globalValuesApi.getAll({
-        search,
-        tipo: tipoFilter,
-        archived: showArchived,
-      });
-
-      setValues(res.data || []);
-    } catch (err) {
-      console.error('Error al cargar los valores globales:', err);
-      setError(err.message || 'Error al conectar con el servidor.');
+      const response = await globalValuesApi.getAll();
+      const data = (response.data || []).filter(
+        (item) => item.tipo !== 'empresa',
+      );
+      setValues(data);
+      setDraft(
+        Object.fromEntries(
+          data.map((item) => [item.id_global_value, item.valor ?? '']),
+        ),
+      );
+    } catch (requestError) {
+      setError(requestError.message);
     } finally {
       setLoading(false);
     }
-  }, [search, tipoFilter, showArchived]);
+  }, []);
 
   useEffect(() => {
-    fetchValues();
-  }, [fetchValues]);
+    loadValues();
+  }, [loadValues]);
 
-  const handleChange = (e) => {
-    setForm({
-      ...form,
-      [e.target.name]: e.target.value,
-    });
-  };
+  const groups = useMemo(() => {
+    const grouped = TIPO_ORDEN.map((tipo) => ({
+      tipo,
+      items: values.filter((item) => item.tipo === tipo),
+    })).filter((group) => group.items.length > 0);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (!form.tipo.trim() || !form.nombre.trim() || !form.valor.trim()) {
-      setError('Completa los campos obligatorios.');
-      return;
+    const otros = values.filter((item) => !TIPO_ORDEN.includes(item.tipo));
+    if (otros.length > 0) {
+      grouped.push({ tipo: 'otros', items: otros });
     }
 
-    try {
-      setSaving(true);
-      setError('');
-      setSuccess('');
+    return grouped;
+  }, [values]);
 
-      const payload = {
-        tipo: form.tipo.trim(),
-        nombre: form.nombre.trim(),
-        valor: form.valor.trim(),
-        descripcion: form.descripcion.trim() || null,
-      };
+  const changedValues = useMemo(
+    () =>
+      values.filter(
+        (item) =>
+          String(draft[item.id_global_value] ?? '') !== String(item.valor ?? ''),
+      ),
+    [values, draft],
+  );
 
-      if (isEditing) {
-        await globalValuesApi.update(form.id_global_value, payload);
-        setSuccess('Valor global actualizado correctamente.');
-      } else {
-        await globalValuesApi.create(payload);
-        setSuccess('Valor global creado correctamente.');
+  const hasChanges = changedValues.length > 0;
+
+  function handleChange(id, value) {
+    setDraft((current) => ({ ...current, [id]: value }));
+    setError('');
+    setSuccess('');
+  }
+
+  function handleReset() {
+    setDraft(
+      Object.fromEntries(
+        values.map((item) => [item.id_global_value, item.valor ?? '']),
+      ),
+    );
+    setError('');
+    setSuccess('');
+  }
+
+  async function handleSave(event) {
+    event.preventDefault();
+
+    for (const item of changedValues) {
+      const value = String(draft[item.id_global_value] ?? '').trim();
+
+      if (!value) {
+        setError(`El valor de "${valueLabel(item)}" no puede estar vacío.`);
+        return;
       }
 
-      resetForm();
-      await fetchValues();
-    } catch (err) {
-      setError(err.message || 'Error al guardar el valor global.');
-    } finally {
-      setSaving(false);
+      if (NUMERIC_VALUES.has(item.nombre) && !/^\d+$/.test(value)) {
+        setError(`El valor de "${valueLabel(item)}" debe ser un número entero.`);
+        return;
+      }
+
+      if (
+        PERCENTAGE_VALUES.has(item.nombre) &&
+        Number(value) > 100
+      ) {
+        setError(`El valor de "${valueLabel(item)}" no puede exceder 100.`);
+        return;
+      }
     }
-  };
 
-  const handleEdit = (item) => {
-    setForm({
-      id_global_value: item.id_global_value,
-      tipo: item.tipo,
-      nombre: item.nombre,
-      valor: item.valor,
-      descripcion: item.descripcion || '',
-    });
-
-    setIsEditing(true);
+    setSaving(true);
     setError('');
     setSuccess('');
 
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleDelete = async (id) => {
-    if (!window.confirm('¿Estás seguro de eliminar este valor global?')) {
-      return;
-    }
-
     try {
-      setError('');
-      setSuccess('');
+      for (const item of changedValues) {
+        await globalValuesApi.update(item.id_global_value, {
+          tipo: item.tipo,
+          nombre: item.nombre,
+          valor: String(draft[item.id_global_value] ?? '').trim(),
+          descripcion: item.descripcion ?? null,
+        });
+      }
 
-      await globalValuesApi.delete(id);
-
-      setSuccess('Valor global eliminado correctamente.');
-      await fetchValues();
-    } catch (err) {
-      setError(err.message || 'Error al eliminar el valor global.');
+      setSuccess('Valores globales actualizados correctamente.');
+      await loadValues();
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setSaving(false);
     }
-  };
-
-  const handleRestore = async (id) => {
-    if (!window.confirm('¿Deseas restaurar este valor global?')) {
-      return;
-    }
-
-    try {
-      setError('');
-      setSuccess('');
-
-      await globalValuesApi.restore(id);
-
-      setSuccess('Valor global restaurado correctamente.');
-      await fetchValues();
-    } catch (err) {
-      setError(err.message || 'Error al restaurar el valor global.');
-    }
-  };
-
-  const resetForm = () => {
-    setForm({
-      id_global_value: null,
-      tipo: '',
-      nombre: '',
-      valor: '',
-      descripcion: '',
-    });
-
-    setIsEditing(false);
-  };
+  }
 
   return (
-    <div className="space-y-6">
-
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-        <div>
-          <h1 className="font-display text-2xl font-bold text-ink">
-            Valores Globales
-          </h1>
-          <p className="text-sm text-muted">
-            Administra las configuraciones y valores generales del sistema.
-          </p>
-        </div>
-
-        <div className="relative w-full sm:w-64">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-          <input
-            type="text"
-            placeholder="Buscar valor global..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-xl border border-line bg-white py-2 pl-9 pr-4 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
-          />
-        </div>
-      </div>
+    <div>
+      <PageHeader
+        title="Valores Globales"
+        description="Configura los valores operativos que usa el sistema. Solo se editan los valores existentes."
+      />
 
       {error && (
-        <Alert variant="danger">
-          <div className="flex items-center justify-between">
-            <span>{error}</span>
-            <button
-              type="button"
-              onClick={fetchValues}
-              className="inline-flex items-center gap-1 font-semibold underline"
-            >
-              <RefreshCw className="h-3 w-3" />
-              Reintentar
-            </button>
-          </div>
-        </Alert>
+        <div className="mb-5">
+          <Alert>
+            <div className="flex flex-wrap items-center gap-3">
+              <span>{error}</span>
+              <button
+                type="button"
+                onClick={loadValues}
+                className="inline-flex items-center gap-1.5 font-semibold underline underline-offset-2"
+              >
+                <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                Reintentar
+              </button>
+            </div>
+          </Alert>
+        </div>
       )}
 
       {success && (
-        <Alert variant="success">
-          <span>{success}</span>
-        </Alert>
-      )}
-
-      {!showArchived && (
-        <div className="rounded-2xl border border-line bg-paper p-6 shadow-soft">
-          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-ink">
-            <Settings className="h-5 w-5 text-clay" />
-            {isEditing ? 'Editar Valor Global' : 'Nuevo Valor Global'}
-          </h2>
-
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 md:grid-cols-2">
-
-            <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">
-                Tipo *
-              </label>
-              <input
-                type="text"
-                name="tipo"
-                value={form.tipo}
-                onChange={handleChange}
-                required
-                maxLength={45}
-                placeholder="Ej. Configuración"
-                className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">
-                Nombre *
-              </label>
-              <input
-                type="text"
-                name="nombre"
-                value={form.nombre}
-                onChange={handleChange}
-                required
-                maxLength={45}
-                placeholder="Ej. moneda"
-                className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">
-                Valor *
-              </label>
-              <textarea
-                name="valor"
-                value={form.valor}
-                onChange={handleChange}
-                required
-                rows={3}
-                placeholder="Escribe el valor correspondiente..."
-                className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">
-                Descripción
-              </label>
-              <input
-                type="text"
-                name="descripcion"
-                value={form.descripcion}
-                onChange={handleChange}
-                maxLength={150}
-                placeholder="Describe para qué sirve este valor..."
-                className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
-              />
-            </div>
-
-            <div className="md:col-span-2 flex justify-end gap-3 pt-2">
-              {isEditing && (
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  disabled={saving}
-                  className="rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-semibold text-muted transition hover:bg-sand"
-                >
-                  Cancelar
-                </button>
-              )}
-
-              <button
-                type="submit"
-                disabled={saving}
-                className="flex items-center gap-2 rounded-xl bg-clay px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-clay/90 disabled:opacity-50"
-              >
-                <Plus className="h-4 w-4" />
-                {saving
-                  ? 'Guardando...'
-                  : isEditing
-                    ? 'Actualizar Valor'
-                    : 'Guardar Valor'}
-              </button>
-            </div>
-          </form>
+        <div className="mb-5">
+          <Alert type="success">{success}</Alert>
         </div>
       )}
 
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <select
-            value={tipoFilter}
-            onChange={(e) => setTipoFilter(e.target.value)}
-            className="rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
-          >
-            <option value="">Todos los tipos</option>
-            {[...new Set(values.map((item) => item.tipo))].map((tipo) => (
-              <option key={tipo} value={tipo}>
-                {tipo}
-              </option>
-            ))}
-          </select>
-
-          <button
-            type="button"
-            onClick={() => {
-              setShowArchived(!showArchived);
-              resetForm();
-              setSuccess('');
-              setError('');
-            }}
-            className="rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-semibold text-muted transition hover:bg-sand"
-          >
-            {showArchived ? 'Ver activos' : 'Ver eliminados'}
-          </button>
+      {loading ? (
+        <div className="space-y-5">
+          {Array.from({ length: 3 }, (_, index) => (
+            <div key={index} className="h-40 animate-pulse rounded-2xl bg-sand" />
+          ))}
         </div>
-
-        <span className="text-sm text-muted">
-          {values.length} registros encontrados
-        </span>
-      </div>
-
-      <div className="overflow-hidden rounded-2xl border border-line bg-paper shadow-soft">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-line">
-            <thead className="bg-sand/50">
-              <tr>
-                <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-muted">
-                  ID
-                </th>
-                <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-muted">
-                  Tipo
-                </th>
-                <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-muted">
-                  Nombre
-                </th>
-                <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-muted">
-                  Valor
-                </th>
-                <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-muted">
-                  Descripción
-                </th>
-                <th className="px-6 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-muted">
-                  Acciones
-                </th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-line bg-white">
-              {loading && values.length === 0 ? (
-                <tr>
-                  <td colSpan="6" className="px-6 py-8 text-center text-sm text-muted">
-                    Cargando valores globales...
-                  </td>
-                </tr>
-              ) : values.length === 0 ? (
-                <tr>
-                  <td colSpan="6" className="px-6 py-8 text-center text-sm text-muted">
-                    No se encontraron valores globales registrados.
-                  </td>
-                </tr>
-              ) : (
-                values.map((item) => (
-                  <tr
-                    key={item.id_global_value}
-                    className="transition hover:bg-sand/20"
-                  >
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-muted">
-                      #{item.id_global_value}
-                    </td>
-
-                    <td className="whitespace-nowrap px-6 py-4 text-sm">
-                      <span className="inline-flex rounded-full bg-clay/10 px-2.5 py-0.5 text-xs font-medium text-clay">
-                        {item.tipo}
-                      </span>
-                    </td>
-
-                    <td className="whitespace-nowrap px-6 py-4 text-sm font-semibold text-ink">
-                      {item.nombre}
-                    </td>
-
-                    <td className="max-w-xs break-words px-6 py-4 text-sm text-muted">
-                      {item.valor}
-                    </td>
-
-                    <td className="px-6 py-4 text-sm text-muted">
-                      {item.descripcion || 'Sin descripción'}
-                    </td>
-
-                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
-                      {showArchived ? (
-                        <button
-                          type="button"
-                          onClick={() => handleRestore(item.id_global_value)}
-                          className="inline-flex items-center gap-1 text-forest hover:underline"
-                        >
-                          <RotateCcw className="h-4 w-4" />
-                          Restaurar
-                        </button>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handleEdit(item)}
-                            className="mr-4 inline-flex items-center gap-1 text-clay hover:underline"
-                          >
-                            <Edit className="h-4 w-4" />
-                            Editar
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(item.id_global_value)}
-                            className="inline-flex items-center gap-1 text-red-600 hover:underline"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                            Eliminar
-                          </button>
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+      ) : values.length === 0 ? (
+        <div className="rounded-2xl border border-line bg-paper p-10 text-center shadow-soft">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-sage text-forest">
+            <Settings className="h-6 w-6" aria-hidden="true" />
+          </div>
+          <p className="mt-3 font-display text-lg font-semibold text-ink">
+            No hay valores globales configurados
+          </p>
+          <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-muted">
+            Carga los valores iniciales de la base de datos para poder editarlos.
+          </p>
         </div>
-      </div>
+      ) : (
+        <form onSubmit={handleSave} className="space-y-5">
+          {groups.map((group) => (
+            <section
+              key={group.tipo}
+              className="overflow-hidden rounded-2xl border border-line bg-paper shadow-soft"
+            >
+              <div className="border-b border-line px-5 py-4 sm:px-6">
+                <h2 className="font-display text-xl font-semibold text-ink">
+                  {TIPO_LABELS[group.tipo] ?? 'Otros'}
+                </h2>
+                <p className="mt-1 text-sm text-muted">
+                  {TIPO_DESCRIPTIONS[group.tipo] ??
+                    'Valores adicionales del sistema.'}
+                </p>
+              </div>
+
+              <div className="grid gap-4 px-5 py-5 sm:grid-cols-2 sm:px-6">
+                {group.items.map((item) => {
+                  const numeric = NUMERIC_VALUES.has(item.nombre);
+                  const unit = VALUE_UNITS[item.nombre];
+                  const inputId = `global-value-${item.id_global_value}`;
+
+                  return (
+                    <Field
+                      key={item.id_global_value}
+                      label={valueLabel(item)}
+                      htmlFor={inputId}
+                      hint={item.descripcion || undefined}
+                    >
+                      <div className="relative">
+                        <input
+                          id={inputId}
+                          type={numeric ? 'number' : 'text'}
+                          inputMode={numeric ? 'numeric' : undefined}
+                          min={numeric ? 0 : undefined}
+                          max={
+                            PERCENTAGE_VALUES.has(item.nombre) ? 100 : undefined
+                          }
+                          step={numeric ? 1 : undefined}
+                          value={draft[item.id_global_value] ?? ''}
+                          onChange={(event) =>
+                            handleChange(item.id_global_value, event.target.value)
+                          }
+                          className={cn(inputClass(), unit && 'pr-16')}
+                          required
+                        />
+                        {unit && (
+                          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs font-semibold text-muted">
+                            {unit}
+                          </span>
+                        )}
+                      </div>
+                    </Field>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleReset}
+              disabled={!hasChanges || saving}
+            >
+              Descartar cambios
+            </Button>
+            <Button type="submit" loading={saving} disabled={!hasChanges || saving}>
+              <Save className="h-4 w-4" aria-hidden="true" />
+              Guardar cambios
+            </Button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }

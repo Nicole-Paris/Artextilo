@@ -25,6 +25,7 @@ import { sucursalesApi } from '../api/sucursales.js';
 import { useDebouncedValue } from '../hooks/useDebouncedValue.js';
 import { cn } from '../lib/cn.js';
 import { formatDateTime, formatMoney } from '../lib/format.js';
+import { isCashier } from '../lib/roles.js';
 
 const MAYOREO_MINIMO = 12;
 const MAYOREO_PORCENTAJE = 10;
@@ -505,7 +506,7 @@ export default function PedidosPage() {
 
   function abrirNuevoPedido() {
     const empleado =
-      empleados.find((item) => item.rol === 'empleado') ?? empleados[0];
+      empleados.find((item) => isCashier(item)) ?? empleados[0];
     const cliente = clientes[0];
 
     setCreateForm({
@@ -1852,6 +1853,7 @@ export default function PedidosPage() {
                 >
                   <option value="efectivo">Efectivo</option>
                   <option value="transferencia">Transferencia</option>
+                  <option value="tarjeta">Tarjeta</option>
                 </select>
               </Field>
 
@@ -2303,6 +2305,7 @@ export default function PedidosPage() {
               >
                 <option value="efectivo">Efectivo</option>
                 <option value="transferencia">Transferencia</option>
+                <option value="tarjeta">Tarjeta</option>
                 {pagoTarget.condicion_pago === 'credito' && (
                   <option value="credito">Crédito</option>
                 )}
@@ -2583,6 +2586,7 @@ export default function PedidosPage() {
                   >
                     <option value="efectivo">Efectivo</option>
                     <option value="transferencia">Transferencia</option>
+                    <option value="tarjeta">Tarjeta</option>
                   </select>
                 </Field>
 
