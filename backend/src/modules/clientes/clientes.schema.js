@@ -28,7 +28,7 @@ export const clientePayloadSchema = z.object({
     .max(45, 'El apellido materno no puede exceder 45 caracteres')
     .optional()
     .nullable()
-    .transform((value) => value ?? ''),
+    .transform((value) => (value ? value : null)),
   correo: z
     .union([
       z

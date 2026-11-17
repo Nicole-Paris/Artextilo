@@ -5,7 +5,7 @@ const DEVOLUCION_FIELDS = `
     d.id_devolucion,
     d.id_pedido,
     CONCAT('P-', LPAD(p.id_pedido, 4, '0')) AS folio,
-    CONCAT_WS(' ', c.nombre, c.apellido_paterno, c.apellido_materno) AS cliente_nombre,
+    CONCAT_WS(' ', c.nombre, c.apellido_paterno) AS cliente_nombre,
     s.nombre AS sucursal_nombre,
     d.monto,
     d.metodo,
@@ -13,7 +13,7 @@ const DEVOLUCION_FIELDS = `
     d.fecha_hora,
     d.id_corte_caja,
     d.id_empleado_autoriza,
-    CONCAT_WS(' ', ea.nombre, ea.apellido_paterno, ea.apellido_materno)
+    CONCAT_WS(' ', ea.nombre, ea.apellido_paterno)
       AS empleado_autoriza_nombre
 `;
 

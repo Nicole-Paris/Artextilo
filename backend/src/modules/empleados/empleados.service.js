@@ -34,6 +34,40 @@ async function ensureCorreoAvailable(correo, excludeId = null) {
   }
 }
 
+async function resolveSucursal(id_sucursal) {
+  if (id_sucursal) {
+    const [sucursales] = await pool.execute(
+      `SELECT id_sucursal
+       FROM sucursal
+       WHERE id_sucursal = ? AND deleted_at IS NULL AND estado = 'activa'
+       LIMIT 1`,
+      [id_sucursal],
+    );
+    if (sucursales.length === 0) {
+      throw ApiError.badRequest(
+        'La sucursal seleccionada no existe, está archivada o inactiva',
+      );
+    }
+    return Number(id_sucursal);
+  }
+
+  // La interfaz ya no solicita sucursal: se asigna la primera sucursal activa.
+  // Cuando el negocio opere varias sucursales, este campo deberá volver al formulario.
+  const [sucursales] = await pool.execute(
+    `SELECT id_sucursal
+     FROM sucursal
+     WHERE deleted_at IS NULL AND estado = 'activa'
+     ORDER BY id_sucursal ASC
+     LIMIT 1`,
+  );
+  if (sucursales.length === 0) {
+    throw ApiError.badRequest(
+      'No hay una sucursal activa para asignar al empleado',
+    );
+  }
+  return Number(sucursales[0].id_sucursal);
+}
+
 async function validateReferences(id_rol, id_sucursal) {
   const [roles] = await pool.execute(
     'SELECT id_rol FROM rol WHERE id_rol = ? AND deleted_at IS NULL LIMIT 1',
@@ -43,16 +77,7 @@ async function validateReferences(id_rol, id_sucursal) {
     throw ApiError.badRequest('El rol seleccionado no existe o está archivado');
   }
 
-  const [sucursales] = await pool.execute(
-    `SELECT id_sucursal
-     FROM sucursal
-     WHERE id_sucursal = ? AND deleted_at IS NULL AND estado = 'activa'
-     LIMIT 1`,
-    [id_sucursal],
-  );
-  if (sucursales.length === 0) {
-    throw ApiError.badRequest('La sucursal seleccionada no existe, está archivada o inactiva');
-  }
+  return resolveSucursal(id_sucursal);
 }
 
 export async function listEmpleados({ search = '' } = {}) {
@@ -107,7 +132,7 @@ export async function createEmpleado(payload) {
   } = payload;
 
   await ensureCorreoAvailable(correo);
-  await validateReferences(id_rol, id_sucursal);
+  const idSucursalFinal = await validateReferences(id_rol, id_sucursal);
 
   const hashedPassword = await bcrypt.hash(contrasena, 10);
   const [result] = await pool.execute(
@@ -125,7 +150,7 @@ export async function createEmpleado(payload) {
       `${horario_entrada}:00`,
       `${horario_salida}:00`,
       id_rol,
-      id_sucursal,
+      idSucursalFinal,
     ],
   );
 
@@ -148,7 +173,10 @@ export async function updateEmpleado(id, payload) {
   } = payload;
 
   await ensureCorreoAvailable(correo, id);
-  await validateReferences(id_rol, id_sucursal);
+  const idSucursalFinal = await validateReferences(
+    id_rol,
+    id_sucursal ?? current.id_sucursal,
+  );
 
   const horarioEntradaFinal = horario_entrada ?? current.horario_entrada;
   const horarioSalidaFinal = horario_salida ?? current.horario_salida;
@@ -166,7 +194,7 @@ export async function updateEmpleado(id, payload) {
     correo,
     telefono,
     id_rol,
-    id_sucursal,
+    idSucursalFinal,
   ];
   let scheduleUpdate = '';
   if (horario_entrada !== undefined) {

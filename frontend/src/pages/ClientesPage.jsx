@@ -6,13 +6,11 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Trash2,
   UserRound,
 } from 'lucide-react';
 import { clientesApi } from '../api/clientes.js';
 import Alert from '../components/Alert.jsx';
 import Button from '../components/Button.jsx';
-import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import Field, { inputClass } from '../components/Field.jsx';
 import IconButton from '../components/IconButton.jsx';
@@ -24,7 +22,6 @@ import { cn } from '../lib/cn.js';
 const EMPTY_FORM = {
   nombre: '',
   apellido_paterno: '',
-  apellido_materno: '',
   telefono: '',
   correo: '',
   direccion: '',
@@ -40,7 +37,7 @@ const EMPTY_TOUCHED = Object.fromEntries(
 );
 
 function fullName(cliente) {
-  return [cliente.nombre, cliente.apellido_paterno, cliente.apellido_materno]
+  return [cliente.nombre, cliente.apellido_paterno]
     .filter(Boolean)
     .join(' ');
 }
@@ -49,7 +46,6 @@ function formFromCliente(cliente) {
   return {
     nombre: cliente.nombre ?? '',
     apellido_paterno: cliente.apellido_paterno ?? '',
-    apellido_materno: cliente.apellido_materno ?? '',
     telefono: cliente.telefono ?? '',
     correo: cliente.correo ?? '',
     direccion: cliente.direccion ?? '',
@@ -74,10 +70,6 @@ export function validateForm(form) {
     errors.apellido_paterno = 'El apellido paterno es obligatorio';
   } else if (form.apellido_paterno.trim().length > 45) {
     errors.apellido_paterno = 'El apellido paterno no puede exceder 45 caracteres';
-  }
-
-  if (form.apellido_materno.trim().length > 45) {
-    errors.apellido_materno = 'El apellido materno no puede exceder 45 caracteres';
   }
 
   if (!/^\d{10,15}$/.test(form.telefono)) {
@@ -141,8 +133,6 @@ export default function ClientesPage() {
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const [deleteTarget, setDeleteTarget] = useState(null);
-  const [deleting, setDeleting] = useState(false);
   const [success, setSuccess] = useState('');
 
   const loadClientes = useCallback(async () => {
@@ -235,7 +225,6 @@ export default function ClientesPage() {
     !editing ||
     form.nombre !== initialForm.nombre ||
     form.apellido_paterno !== initialForm.apellido_paterno ||
-    form.apellido_materno !== initialForm.apellido_materno ||
     form.telefono !== initialForm.telefono ||
     form.correo !== initialForm.correo ||
     form.direccion !== initialForm.direccion ||
@@ -259,7 +248,6 @@ export default function ClientesPage() {
       ...form,
       nombre: form.nombre.trim(),
       apellido_paterno: form.apellido_paterno.trim(),
-      apellido_materno: form.apellido_materno.trim(),
       telefono: form.telefono.trim(),
       correo: form.correo.trim(),
       direccion: form.direccion.trim(),
@@ -314,24 +302,6 @@ export default function ClientesPage() {
       }
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function handleDelete() {
-    if (!deleteTarget) return;
-    setDeleting(true);
-    setError('');
-
-    try {
-      const response = await clientesApi.remove(deleteTarget.id_cliente);
-      setSuccess(response.message || 'Cliente eliminado correctamente');
-      setDeleteTarget(null);
-      await loadClientes();
-    } catch (requestError) {
-      setError(requestError.message);
-      setDeleteTarget(null);
-    } finally {
-      setDeleting(false);
     }
   }
 
@@ -476,12 +446,6 @@ export default function ClientesPage() {
                             variant="edit"
                             onClick={() => openEdit(cliente)}
                           />
-                          <IconButton
-                            label={`Eliminar ${fullName(cliente)}`}
-                            icon={Trash2}
-                            variant="archive"
-                            onClick={() => setDeleteTarget(cliente)}
-                          />
                         </div>
                       </td>
                     </tr>
@@ -517,12 +481,6 @@ export default function ClientesPage() {
                       icon={Pencil}
                       variant="edit"
                       onClick={() => openEdit(cliente)}
-                    />
-                    <IconButton
-                      label={`Eliminar ${fullName(cliente)}`}
-                      icon={Trash2}
-                      variant="archive"
-                      onClick={() => setDeleteTarget(cliente)}
                     />
                   </div>
                 </article>
@@ -607,24 +565,6 @@ export default function ClientesPage() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field
-              label="Apellido materno (opcional)"
-              htmlFor="cliente-apellido-materno"
-              error={visibleFieldErrors.apellido_materno}
-            >
-              <input
-                id="cliente-apellido-materno"
-                data-field="apellido_materno"
-                type="text"
-                value={form.apellido_materno}
-                onChange={(event) => updateField('apellido_materno', event.target.value)}
-                onBlur={() => markTouched('apellido_materno')}
-                className={inputClass(visibleFieldErrors.apellido_materno)}
-                maxLength={45}
-                autoComplete="additional-name"
-              />
-            </Field>
-
             <Field
               label="Teléfono"
               htmlFor="cliente-telefono"
@@ -827,17 +767,6 @@ export default function ClientesPage() {
         </form>
       </Modal>
 
-      <ConfirmDialog
-        open={Boolean(deleteTarget)}
-        title="Eliminar cliente"
-        message="El cliente dejará de aparecer en la agenda. Sus pedidos anteriores se conservan."
-        confirmLabel="Eliminar"
-        loading={deleting}
-        onCancel={() => {
-          if (!deleting) setDeleteTarget(null);
-        }}
-        onConfirm={handleDelete}
-      />
     </div>
   );
 }

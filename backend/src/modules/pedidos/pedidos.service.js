@@ -36,10 +36,10 @@ const BASE_PEDIDO_SELECT = `
     p.created_at,
     p.updated_at,
     CONCAT('P-', LPAD(p.id_pedido, 4, '0')) AS folio,
-    CONCAT_WS(' ', c.nombre, c.apellido_paterno, c.apellido_materno) AS cliente_nombre,
+    CONCAT_WS(' ', c.nombre, c.apellido_paterno) AS cliente_nombre,
     c.telefono AS cliente_telefono,
     c.correo AS cliente_correo,
-    CONCAT_WS(' ', e.nombre, e.apellido_paterno, e.apellido_materno) AS empleado_nombre,
+    CONCAT_WS(' ', e.nombre, e.apellido_paterno) AS empleado_nombre,
     s.nombre AS sucursal_nombre,
     COALESCE((
       SELECT SUM(pg.monto)
@@ -400,7 +400,7 @@ export async function getPedido(id) {
        pg.metodo_pago,
        pg.concepto_pago,
        pg.referencia,
-       CONCAT_WS(' ', e.nombre, e.apellido_paterno, e.apellido_materno) AS empleado_nombre,
+       CONCAT_WS(' ', e.nombre, e.apellido_paterno) AS empleado_nombre,
        cc.fecha_apertura AS corte_fecha_apertura,
        cc.estado AS corte_estado
      FROM pago pg
@@ -421,7 +421,7 @@ export async function getPedido(id) {
        d.metodo,
        d.motivo,
        d.fecha_hora,
-       CONCAT_WS(' ', e.nombre, e.apellido_paterno, e.apellido_materno) AS autoriza_nombre
+       CONCAT_WS(' ', e.nombre, e.apellido_paterno) AS autoriza_nombre
      FROM devolucion d
      INNER JOIN empleado e ON e.id_empleado = d.id_empleado_autoriza
      WHERE d.id_pedido = ? AND d.deleted_at IS NULL

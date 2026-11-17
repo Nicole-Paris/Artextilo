@@ -44,7 +44,7 @@ const empleadoPayloadObjectSchema = z.object({
     .max(45, 'El apellido materno no puede exceder 45 caracteres')
     .optional()
     .nullable()
-    .transform((value) => value ?? ''),
+    .transform((value) => (value ? value : null)),
   correo: z
     .string({ error: 'El correo es obligatorio' })
     .trim()
@@ -68,7 +68,9 @@ const empleadoPayloadObjectSchema = z.object({
   id_sucursal: z
     .coerce.number({ error: 'El ID de la sucursal debe ser numérico' })
     .int('El ID de la sucursal debe ser entero')
-    .positive('El ID de la sucursal debe ser mayor a cero'),
+    .positive('El ID de la sucursal debe ser mayor a cero')
+    .optional()
+    .nullable(),
 });
 
 export const empleadoPayloadSchema = empleadoPayloadObjectSchema.superRefine((payload, ctx) => {

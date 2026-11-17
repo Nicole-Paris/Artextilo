@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  Archive,
-  ArchiveRestore,
   Clock,
   MapPin,
   Pencil,
@@ -14,13 +12,11 @@ import {
 } from 'lucide-react';
 import Alert from '../components/Alert.jsx';
 import Button from '../components/Button.jsx';
-import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import Field, { inputClass } from '../components/Field.jsx';
 import IconButton from '../components/IconButton.jsx';
 import Modal from '../components/Modal.jsx';
 import PageHeader from '../components/PageHeader.jsx';
-import SegmentedControl from '../components/SegmentedControl.jsx';
 import { sucursalesApi } from '../api/sucursales.js';
 import { useDebouncedValue } from '../hooks/useDebouncedValue.js';
 import { cn } from '../lib/cn.js';
@@ -39,7 +35,6 @@ export default function SucursalesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
-  const [archived, setArchived] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const debouncedSearch = useDebouncedValue(search, 300);
   const requestIdRef = useRef(0);
@@ -51,13 +46,7 @@ export default function SucursalesPage() {
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const [archiveTarget, setArchiveTarget] = useState(null);
-  const [archiveDependencies, setArchiveDependencies] = useState(null);
-  const [loadingDependencies, setLoadingDependencies] = useState(false);
-  const [archiving, setArchiving] = useState(false);
-  const [restoringId, setRestoringId] = useState(null);
   const [success, setSuccess] = useState('');
-  const dependencyRequestRef = useRef(0);
 
   const loadSucursales = useCallback(async () => {
     const requestId = ++requestIdRef.current;
@@ -65,7 +54,7 @@ export default function SucursalesPage() {
     setError('');
 
     try {
-      const response = await sucursalesApi.list(debouncedSearch, { archived });
+      const response = await sucursalesApi.list(debouncedSearch);
       if (requestId !== requestIdRef.current) return;
       setSucursales(response.data);
     } catch (requestError) {
@@ -74,7 +63,7 @@ export default function SucursalesPage() {
     } finally {
       if (requestId === requestIdRef.current) setLoading(false);
     }
-  }, [debouncedSearch, archived]);
+  }, [debouncedSearch]);
 
   useEffect(() => {
     loadSucursales();
@@ -166,134 +155,18 @@ export default function SucursalesPage() {
     }
   }
 
-  async function openArchive(sucursal) {
-    const requestId = ++dependencyRequestRef.current;
-    setArchiveTarget(sucursal);
-    setArchiveDependencies(null);
-    setLoadingDependencies(true);
-
-    try {
-      const response = await sucursalesApi.dependencies(sucursal.id_sucursal);
-      if (requestId !== dependencyRequestRef.current) return;
-      setArchiveDependencies(response.data);
-    } catch (requestError) {
-      if (requestId !== dependencyRequestRef.current) return;
-      setArchiveDependencies({ error: requestError.message });
-    } finally {
-      if (requestId === dependencyRequestRef.current) setLoadingDependencies(false);
-    }
-  }
-
-  function resetArchive() {
-    dependencyRequestRef.current += 1;
-    setArchiveTarget(null);
-    setArchiveDependencies(null);
-    setLoadingDependencies(false);
-  }
-
-  function closeArchive() {
-    if (archiving) return;
-    resetArchive();
-  }
-
-  async function handleArchive() {
-    if (!archiveTarget || archiveDependencies?.total > 0 || archiveDependencies?.error) return;
-
-    setArchiving(true);
-    try {
-      await sucursalesApi.remove(archiveTarget.id_sucursal);
-      setSuccess('Sucursal archivada correctamente.');
-      resetArchive();
-      await loadSucursales();
-    } catch (requestError) {
-      setError(requestError.message);
-      resetArchive();
-    } finally {
-      setArchiving(false);
-    }
-  }
-
-  async function handleRestore(sucursal) {
-    setRestoringId(sucursal.id_sucursal);
-    setError('');
-    try {
-      await sucursalesApi.restore(sucursal.id_sucursal);
-      setSuccess('Sucursal restaurada correctamente.');
-      await loadSucursales();
-    } catch (requestError) {
-      setError(requestError.message);
-    } finally {
-      setRestoringId(null);
-    }
-  }
-
-  const dependencyTotal = archiveDependencies?.total ?? 0;
-  const archiveBlocked = Boolean(archiveDependencies?.error) || dependencyTotal > 0;
-  const dependencyParts = [];
-  if (archiveDependencies?.empleados > 0) {
-    dependencyParts.push(`${archiveDependencies.empleados} empleado(s) activo(s)`);
-  }
-  if (archiveDependencies?.inventario > 0) {
-    dependencyParts.push(`${archiveDependencies.inventario} registro(s) de inventario activo(s)`);
-  }
-  const dependencySummary = dependencyParts.join(' y ');
-
-  const countLabel = archived
-    ? `${sucursales.length} ${
-        sucursales.length === 1 ? 'sucursal archivada' : 'sucursales archivadas'
-      }`
-    : `${sucursales.length} ${
-        sucursales.length === 1 ? 'sucursal activa' : 'sucursales activas'
-      }`;
-
-  const archiveMessage = loadingDependencies
-    ? 'Revisando dependencias…'
-    : archiveDependencies?.error
-      ? `No se pudieron revisar las dependencias: ${archiveDependencies.error}`
-      : dependencyTotal > 0
-        ? `No se puede archivar "${archiveTarget?.nombre}" porque tiene ${dependencySummary}. Reasigna o desactiva esas dependencias primero.`
-        : `"${archiveTarget?.nombre}" dejará de aparecer en la lista activa. Podrás restaurarla desde la pestaña Archivados. No se borra de la base de datos.`;
-
-  const archiveDetails =
-    !loadingDependencies && !archiveDependencies?.error && dependencyTotal > 0 ? (
-      <ul className="list-disc space-y-1 pl-4">
-        {archiveDependencies.empleados > 0 && (
-          <li>{archiveDependencies.empleados} empleado(s) activo(s)</li>
-        )}
-        {archiveDependencies.inventario > 0 && (
-          <li>{archiveDependencies.inventario} registro(s) de inventario activo(s)</li>
-        )}
-      </ul>
-    ) : null;
+  const countLabel = `${sucursales.length} ${
+    sucursales.length === 1 ? 'sucursal activa' : 'sucursales activas'
+  }`;
 
   function renderActions(sucursal) {
-    if (archived) {
-      return (
-        <IconButton
-          label={`Restaurar ${sucursal.nombre}`}
-          icon={ArchiveRestore}
-          variant="restore"
-          onClick={() => handleRestore(sucursal)}
-          loading={restoringId === sucursal.id_sucursal}
-        />
-      );
-    }
-
     return (
-      <>
-        <IconButton
-          label={`Editar ${sucursal.nombre}`}
-          icon={Pencil}
-          variant="edit"
-          onClick={() => openEdit(sucursal)}
-        />
-        <IconButton
-          label={`Archivar ${sucursal.nombre}`}
-          icon={Archive}
-          variant="archive"
-          onClick={() => openArchive(sucursal)}
-        />
-      </>
+      <IconButton
+        label={`Editar ${sucursal.nombre}`}
+        icon={Pencil}
+        variant="edit"
+        onClick={() => openEdit(sucursal)}
+      />
     );
   }
 
@@ -326,20 +199,9 @@ export default function SucursalesPage() {
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <SegmentedControl
-              value={archived}
-              onChange={setArchived}
-              label="Filtrar sucursales por estado"
-              options={[
-                { value: false, label: 'Activas' },
-                { value: true, label: 'Archivadas' },
-              ]}
-            />
-            <p className="text-sm text-muted" aria-live="polite">
-              {loading ? 'Cargando…' : countLabel}
-            </p>
-          </div>
+          <p className="text-sm text-muted" aria-live="polite">
+            {loading ? 'Cargando…' : countLabel}
+          </p>
         </div>
 
         {success && (
@@ -375,22 +237,13 @@ export default function SucursalesPage() {
         ) : error ? null : sucursales.length === 0 ? (
           <EmptyState
             icon={Store}
-            title={
-              archived
-                ? 'No hay sucursales archivadas'
-                : search
-                  ? 'Sin resultados'
-                  : 'Aún no hay sucursales registradas'
-            }
+            title={search ? 'Sin resultados' : 'Aún no hay sucursales registradas'}
             description={
-              archived
-                ? 'Las sucursales que archives aparecerán aquí y podrás restaurarlas.'
-                : search
-                  ? 'No encontramos sucursales que coincidan con la búsqueda.'
-                  : 'Registra la primera sucursal para empezar a operar.'
+              search
+                ? 'No encontramos sucursales que coincidan con la búsqueda.'
+                : 'Registra la primera sucursal para empezar a operar.'
             }
             action={
-              !archived &&
               !search && (
                 <Button onClick={openCreate}>
                   <Plus className="h-4 w-4" aria-hidden="true" />
@@ -409,7 +262,7 @@ export default function SucursalesPage() {
                     <th className="px-4 py-3 font-semibold sm:px-6">Contacto</th>
                     <th className="px-4 py-3 font-semibold sm:px-6">Horario</th>
                     <th className="whitespace-nowrap px-4 py-3 font-semibold sm:px-6">
-                      {archived ? 'Archivada' : 'Actualizada'}
+                      Actualizada
                     </th>
                     <th className="px-4 py-3 text-right font-semibold sm:px-6">
                       Acciones
@@ -448,7 +301,7 @@ export default function SucursalesPage() {
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-4 text-muted sm:px-6">
-                        {formatDate(archived ? sucursal.deleted_at : sucursal.updated_at)}
+                        {formatDate(sucursal.updated_at)}
                       </td>
                       <td className="whitespace-nowrap px-4 py-4 text-right sm:px-6">
                         <div className="flex justify-end gap-1">{renderActions(sucursal)}</div>
@@ -485,8 +338,7 @@ export default function SucursalesPage() {
                         </span>
                       </div>
                       <p className="mt-2 text-xs text-muted">
-                        {archived ? 'Archivada' : 'Actualizada'}:{' '}
-                        {formatDate(archived ? sucursal.deleted_at : sucursal.updated_at)}
+                        Actualizada: {formatDate(sucursal.updated_at)}
                       </p>
                     </div>
                   </div>
@@ -637,23 +489,6 @@ export default function SucursalesPage() {
         </form>
       </Modal>
 
-      <ConfirmDialog
-        open={Boolean(archiveTarget)}
-        title="Archivar sucursal"
-        message={archiveMessage}
-        details={archiveDetails}
-        confirmLabel={
-          loadingDependencies
-            ? 'Revisando…'
-            : archiveBlocked
-              ? 'No se puede archivar'
-              : 'Archivar'
-        }
-        confirmDisabled={loadingDependencies || archiveBlocked}
-        loading={archiving}
-        onCancel={closeArchive}
-        onConfirm={handleArchive}
-      />
     </div>
   );
 }

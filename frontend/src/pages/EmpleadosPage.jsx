@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import { empleadosApi } from '../api/empleados.js';
 import { rolesApi } from '../api/roles.js';
-import { sucursalesApi } from '../api/sucursales.js';
 import Alert from '../components/Alert.jsx';
 import Button from '../components/Button.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
@@ -28,37 +27,29 @@ import { cn } from '../lib/cn.js';
 const EMPTY_FORM = {
   nombre: '',
   apellido_paterno: '',
-  apellido_materno: '',
   correo: '',
   telefono: '',
   contrasena: '',
   horario_entrada: '09:00',
   horario_salida: '18:00',
   id_rol: '',
-  id_sucursal: '',
 };
 
 function formFromEmpleado(empleado) {
   return {
     nombre: empleado.nombre ?? '',
     apellido_paterno: empleado.apellido_paterno ?? '',
-    apellido_materno: empleado.apellido_materno ?? '',
     correo: empleado.correo ?? '',
     telefono: empleado.telefono ?? '',
     contrasena: '',
     horario_entrada: empleado.horario_entrada?.slice(0, 5) ?? '09:00',
     horario_salida: empleado.horario_salida?.slice(0, 5) ?? '18:00',
     id_rol: String(empleado.id_rol ?? ''),
-    id_sucursal: String(empleado.id_sucursal ?? ''),
   };
 }
 
 function fullName(empleado) {
-  return [
-    empleado.nombre,
-    empleado.apellido_paterno,
-    empleado.apellido_materno,
-  ]
+  return [empleado.nombre, empleado.apellido_paterno]
     .filter(Boolean)
     .join(' ');
 }
@@ -86,10 +77,6 @@ export function validateForm(form, { editing }) {
     errors.apellido_paterno = 'El apellido paterno es obligatorio';
   } else if (form.apellido_paterno.trim().length > 45) {
     errors.apellido_paterno = 'El apellido paterno no puede exceder 45 caracteres';
-  }
-
-  if (form.apellido_materno.trim().length > 45) {
-    errors.apellido_materno = 'El apellido materno no puede exceder 45 caracteres';
   }
 
   const correo = form.correo.trim();
@@ -124,10 +111,6 @@ export function validateForm(form, { editing }) {
     errors.id_rol = 'Selecciona un rol';
   }
 
-  if (!form.id_sucursal) {
-    errors.id_sucursal = 'Selecciona una sucursal';
-  }
-
   return errors;
 }
 
@@ -155,7 +138,6 @@ export default function EmpleadosPage() {
   const [saving, setSaving] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [roles, setRoles] = useState([]);
-  const [sucursales, setSucursales] = useState([]);
   const [loadingReferences, setLoadingReferences] = useState(false);
   const [referenceError, setReferenceError] = useState('');
   const referencesRequestRef = useRef(0);
@@ -197,18 +179,10 @@ export default function EmpleadosPage() {
     setReferenceError('');
 
     try {
-      const [rolesResponse, sucursalesResponse] = await Promise.all([
-        rolesApi.list(),
-        sucursalesApi.list(),
-      ]);
+      const rolesResponse = await rolesApi.list();
 
       if (requestId !== referencesRequestRef.current) return;
       setRoles(rolesResponse.data);
-      setSucursales(
-        sucursalesResponse.data.filter(
-          (sucursal) => sucursal.estado === undefined || sucursal.estado === 'activa',
-        ),
-      );
     } catch (requestError) {
       if (requestId !== referencesRequestRef.current) return;
       setReferenceError(requestError.message);
@@ -277,11 +251,9 @@ export default function EmpleadosPage() {
     !editing ||
     form.nombre !== initialForm.nombre ||
     form.apellido_paterno !== initialForm.apellido_paterno ||
-    form.apellido_materno !== initialForm.apellido_materno ||
     form.correo !== initialForm.correo ||
     form.telefono !== initialForm.telefono ||
     form.id_rol !== initialForm.id_rol ||
-    form.id_sucursal !== initialForm.id_sucursal ||
     form.horario_entrada !== initialForm.horario_entrada ||
     form.horario_salida !== initialForm.horario_salida ||
     form.contrasena !== '';
@@ -510,7 +482,6 @@ export default function EmpleadosPage() {
                     <th className="px-4 py-3 font-semibold sm:px-6">Empleado</th>
                     <th className="px-4 py-3 font-semibold sm:px-6">Contacto</th>
                     <th className="px-4 py-3 font-semibold sm:px-6">Rol</th>
-                    <th className="px-4 py-3 font-semibold sm:px-6">Sucursal</th>
                     <th className="px-4 py-3 font-semibold sm:px-6">Estado</th>
                     <th className="px-4 py-3 text-right font-semibold sm:px-6">
                       Acciones
@@ -536,7 +507,6 @@ export default function EmpleadosPage() {
                         <p className="mt-1 whitespace-nowrap text-xs">{empleado.telefono}</p>
                       </td>
                       <td className="px-4 py-4 text-muted sm:px-6">{empleado.rol}</td>
-                      <td className="px-4 py-4 text-muted sm:px-6">{empleado.sucursal}</td>
                       <td className="px-4 py-4 sm:px-6">{renderEstadoBadge(empleado)}</td>
                       <td className="whitespace-nowrap px-4 py-4 text-right sm:px-6">
                         {renderActions(empleado)}
@@ -565,7 +535,6 @@ export default function EmpleadosPage() {
                       <div className="mt-2 flex flex-col gap-1 text-xs leading-5 text-muted sm:flex-row sm:flex-wrap sm:gap-x-4">
                         <span>{empleado.telefono}</span>
                         <span>Rol: {empleado.rol}</span>
-                        <span>Sucursal: {empleado.sucursal}</span>
                       </div>
                     </div>
                   </div>
@@ -612,7 +581,7 @@ export default function EmpleadosPage() {
           {referenceError && (
             <Alert>
               <div className="flex flex-wrap items-center gap-3">
-                <span>No se pudieron cargar los roles y sucursales: {referenceError}</span>
+                <span>No se pudieron cargar los roles: {referenceError}</span>
                 <button
                   type="button"
                   onClick={loadReferences}
@@ -665,24 +634,6 @@ export default function EmpleadosPage() {
               />
             </Field>
           </div>
-
-          <Field
-            label="Apellido materno (opcional)"
-            htmlFor="empleado-apellido-materno"
-            error={visibleFieldErrors.apellido_materno}
-          >
-            <input
-              id="empleado-apellido-materno"
-              data-field="apellido_materno"
-              type="text"
-              value={form.apellido_materno}
-              onChange={(event) => updateField('apellido_materno', event.target.value)}
-              onBlur={() => markTouched('apellido_materno')}
-              className={inputClass(visibleFieldErrors.apellido_materno)}
-              maxLength={45}
-              autoComplete="additional-name"
-            />
-          </Field>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
@@ -806,55 +757,30 @@ export default function EmpleadosPage() {
             </Field>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field
-              label="Rol"
-              htmlFor="empleado-rol"
-              error={visibleFieldErrors.id_rol}
+          <Field
+            label="Rol"
+            htmlFor="empleado-rol"
+            error={visibleFieldErrors.id_rol}
+            hint="Solo administrador y supervisor/gerente pueden abrir o cerrar cajas."
+          >
+            <select
+              id="empleado-rol"
+              data-field="id_rol"
+              value={form.id_rol}
+              onChange={(event) => updateField('id_rol', event.target.value)}
+              onBlur={() => markTouched('id_rol')}
+              className={inputClass(visibleFieldErrors.id_rol)}
+              disabled={loadingReferences}
+              required
             >
-              <select
-                id="empleado-rol"
-                data-field="id_rol"
-                value={form.id_rol}
-                onChange={(event) => updateField('id_rol', event.target.value)}
-                onBlur={() => markTouched('id_rol')}
-                className={inputClass(visibleFieldErrors.id_rol)}
-                disabled={loadingReferences}
-                required
-              >
-                <option value="">Selecciona un rol</option>
-                {roles.map((rol) => (
-                  <option key={rol.id_rol} value={rol.id_rol}>
-                    {rol.nombre}
-                  </option>
-                ))}
-              </select>
-            </Field>
-
-            <Field
-              label="Sucursal"
-              htmlFor="empleado-sucursal"
-              error={visibleFieldErrors.id_sucursal}
-            >
-              <select
-                id="empleado-sucursal"
-                data-field="id_sucursal"
-                value={form.id_sucursal}
-                onChange={(event) => updateField('id_sucursal', event.target.value)}
-                onBlur={() => markTouched('id_sucursal')}
-                className={inputClass(visibleFieldErrors.id_sucursal)}
-                disabled={loadingReferences}
-                required
-              >
-                <option value="">Selecciona una sucursal</option>
-                {sucursales.map((sucursal) => (
-                  <option key={sucursal.id_sucursal} value={sucursal.id_sucursal}>
-                    {sucursal.nombre}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
+              <option value="">Selecciona un rol</option>
+              {roles.map((rol) => (
+                <option key={rol.id_rol} value={rol.id_rol}>
+                  {rol.nombre}
+                </option>
+              ))}
+            </select>
+          </Field>
         </form>
       </Modal>
 
