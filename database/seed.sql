@@ -1,15 +1,21 @@
 USE artextilo_db;
 
 INSERT INTO rol (nombre, descripcion)
-SELECT 'Administrador', 'Acceso total al sistema y configuración general'
+SELECT 'administrador', 'Acceso total al sistema y configuración general'
 WHERE NOT EXISTS (
   SELECT 1 FROM rol WHERE LOWER(nombre) = 'administrador' AND deleted_at IS NULL
 );
 
 INSERT INTO rol (nombre, descripcion)
-SELECT 'Cajera', 'Atención en mostrador, registro de pedidos y cobro'
+SELECT 'cajera', 'Atención en mostrador, registro de pedidos y cobro'
 WHERE NOT EXISTS (
   SELECT 1 FROM rol WHERE LOWER(nombre) = 'cajera' AND deleted_at IS NULL
+);
+
+INSERT INTO rol (nombre, descripcion)
+SELECT 'supervisor', 'Apertura y cierre de cajas de la sucursal'
+WHERE NOT EXISTS (
+  SELECT 1 FROM rol WHERE LOWER(nombre) = 'supervisor' AND deleted_at IS NULL
 );
 
 INSERT INTO sucursal (nombre, direccion, ciudad, estado_republica, codigo_postal, telefono, horario)

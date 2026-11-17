@@ -11,7 +11,6 @@ import {
   LayoutDashboard,
   Menu,
   Contact,
-  ShieldCheck,
   Store,
   Users,
   X,
@@ -36,7 +35,6 @@ const navigation = [
   { to: '/clientes', label: 'Clientes', icon: Contact },
   { to: '/empleados', label: 'Empleados', icon: Users },
   { to: '/sucursales', label: 'Sucursales', icon: Store },
-  { to: '/roles', label: 'Roles', icon: ShieldCheck },
   { to: '/categorias', label: 'Categorías', icon: Tag },
   { to: '/productos', label: 'Productos', icon: Package },
   { to: '/inventario', label: 'Inventario', icon: Boxes },
@@ -50,7 +48,6 @@ const routeTitles = {
   '/clientes': 'Clientes',
   '/empleados': 'Empleados',
   '/sucursales': 'Sucursales',
-  '/roles': 'Roles',
   '/categorias': 'Categorías de Productos',
   '/productos': 'Catálogo de Productos',
   '/inventario': 'Control de Inventario y Movimientos',
@@ -198,18 +195,15 @@ export default function Layout() {
 
   const inicial = empleado?.nombre?.charAt(0)?.toUpperCase() || 'U';
   const nombrePerfil = empleado
-    ? [
-      empleado.nombre,
-      empleado.apellido_paterno,
-      empleado.apellido_materno,
-    ].filter(Boolean).join(' ')
+    ? [empleado.nombre, empleado.apellido_paterno]
+      .filter(Boolean)
+      .join(' ')
     : '';
   const datosPerfil = [
     ['Nombre completo', nombrePerfil],
     ['Correo', empleado?.correo],
     ['Teléfono', empleado?.telefono],
     ['Rol', empleado?.rol],
-    ['Sucursal', empleado?.sucursal],
     ['Horario de entrada', empleado?.horario_entrada],
     ['Horario de salida', empleado?.horario_salida],
   ].filter(([, value]) => value != null && String(value).trim() !== '');

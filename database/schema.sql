@@ -45,7 +45,7 @@ CREATE TABLE empleado (
     id_empleado INT AUTO_INCREMENT PRIMARY KEY,
     nombre VARCHAR(50) NOT NULL,
     apellido_paterno VARCHAR(45) NOT NULL,
-    apellido_materno VARCHAR(45) NOT NULL,
+    apellido_materno VARCHAR(45) NULL,
     telefono VARCHAR(15) NOT NULL,
     correo VARCHAR(100) NOT NULL,
     contrasena VARCHAR(255) NOT NULL,
@@ -75,7 +75,7 @@ CREATE TABLE cliente (
     id_cliente INT AUTO_INCREMENT PRIMARY KEY,
     nombre VARCHAR(50) NOT NULL,
     apellido_paterno VARCHAR(45) NOT NULL,
-    apellido_materno VARCHAR(45) NOT NULL,
+    apellido_materno VARCHAR(45) NULL,
     telefono VARCHAR(15) NOT NULL,
     correo VARCHAR(100) NULL,
     direccion VARCHAR(150) NULL,
@@ -170,6 +170,7 @@ CREATE TABLE corte_caja (
     fondo_inicial INT NOT NULL DEFAULT 0,
     total_efectivo INT NOT NULL DEFAULT 0,
     total_transferencia INT NOT NULL DEFAULT 0,
+    total_tarjeta INT NOT NULL DEFAULT 0,
     total_credito INT NOT NULL DEFAULT 0,
     total_devoluciones INT NOT NULL DEFAULT 0,
     saldo_esperado INT NOT NULL DEFAULT 0,
@@ -197,6 +198,7 @@ CREATE TABLE corte_caja (
     CONSTRAINT chk_corte_fondo CHECK (fondo_inicial >= 0),
     CONSTRAINT chk_corte_efectivo CHECK (total_efectivo >= 0),
     CONSTRAINT chk_corte_transferencia CHECK (total_transferencia >= 0),
+    CONSTRAINT chk_corte_tarjeta CHECK (total_tarjeta >= 0),
     CONSTRAINT chk_corte_credito CHECK (total_credito >= 0),
     CONSTRAINT chk_corte_devoluciones CHECK (total_devoluciones >= 0),
     CONSTRAINT chk_corte_saldo CHECK (saldo_real IS NULL OR saldo_real >= 0)
@@ -325,7 +327,7 @@ CREATE TABLE pago (
     id_corte_caja INT NOT NULL,
     monto INT NOT NULL,
     fecha_hora DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    metodo_pago ENUM('efectivo', 'transferencia', 'credito') NOT NULL DEFAULT 'efectivo',
+    metodo_pago ENUM('efectivo', 'transferencia', 'tarjeta', 'credito') NOT NULL DEFAULT 'efectivo',
     concepto_pago ENUM('anticipo', 'abono', 'liquidacion') NOT NULL,
     referencia VARCHAR(50) NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -352,7 +354,7 @@ CREATE TABLE devolucion (
     id_empleado_autoriza INT NOT NULL,
     id_corte_caja INT NULL,
     monto INT NOT NULL,
-    metodo ENUM('efectivo', 'transferencia') NOT NULL DEFAULT 'efectivo',
+    metodo ENUM('efectivo', 'transferencia', 'tarjeta') NOT NULL DEFAULT 'efectivo',
     motivo VARCHAR(255) NOT NULL,
     fecha_hora DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -427,7 +429,8 @@ CREATE TABLE global_values (
 
 INSERT INTO rol (nombre, descripcion) VALUES
     ('administrador', 'Dueña: control total del sistema y caja'),
-    ('empleado', 'Cajera: pedidos, catálogo, inventario y cobros');
+    ('cajera', 'Atención en mostrador, registro de pedidos y cobro'),
+    ('supervisor', 'Apertura y cierre de cajas de la sucursal');
 
 INSERT INTO sucursal
     (nombre, direccion, ciudad, estado_republica, codigo_postal, telefono, horario, descripcion)
@@ -441,14 +444,6 @@ INSERT INTO categoria_producto (nombre, descripcion) VALUES
     ('Vestido', 'Vestidos bordados típicos');
 
 INSERT INTO global_values (tipo, nombre, valor, descripcion) VALUES
-    ('empresa', 'nombre_comercial', 'Artextilo', 'Nombre comercial de la tienda'),
-    ('empresa', 'razon_social', 'Artextilo Tradición y Moda S.A. de C.V.', 'Razón social fiscal'),
-    ('empresa', 'rfc', 'ARTX20000101XYZ', 'RFC del negocio'),
-    ('empresa', 'direccion_fiscal', 'Calle Principal 123, Col. Centro', 'Dirección fiscal'),
-    ('empresa', 'codigo_postal', '68000', 'Código postal fiscal'),
-    ('empresa', 'telefono_contacto', '9510000000', 'Teléfono principal'),
-    ('empresa', 'correo_contacto', 'contacto@artextilo.com', 'Correo de atención a clientes'),
-    ('empresa', 'logo_url', '/assets/img/logo_artextilo.png', 'Ruta del logo para PDFs'),
     ('ventas', 'mayoreo_minimo_piezas', '12', 'Piezas mínimas para mayoreo'),
     ('ventas', 'descuento_mayoreo_porcentaje', '10', 'Porcentaje de descuento por mayoreo'),
     ('ventas', 'anticipo_porcentaje', '50', 'Porcentaje mínimo de anticipo'),

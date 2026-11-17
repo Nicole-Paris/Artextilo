@@ -13,7 +13,6 @@ import EmpleadosPage from './pages/EmpleadosPage.jsx';
 import InventarioPage from './pages/InventarioPage.jsx';
 import NotFound from './pages/NotFound.jsx';
 import PedidosPage from './pages/PedidosPage.jsx';
-import RolesPage from './pages/RolesPage.jsx';
 import SucursalesPage from './pages/SucursalesPage.jsx';
 import CategoriaPage from './pages/CategoriaPage.jsx';
 import ProductosPage from './pages/ProductosPage.jsx';
@@ -30,7 +29,6 @@ export default function App() {
           <Route path="clientes" element={<ClientesPage />} />
           <Route path="empleados" element={<EmpleadosPage />} />
           <Route path="sucursales" element={<SucursalesPage />} />
-          <Route path="roles" element={<RolesPage />} />
           <Route path="categorias" element={<CategoriaPage />} />
           <Route path="productos" element={<ProductosPage />} />
           <Route path="inventario" element={<InventarioPage />} />
