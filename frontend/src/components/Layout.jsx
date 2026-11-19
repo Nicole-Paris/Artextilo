@@ -30,7 +30,7 @@ import { useDialogFocus } from '../hooks/useDialogFocus.js';
 import Modal from './Modal.jsx';
 
 const navigation = [
-  { to: '/', label: 'Inicio', icon: LayoutDashboard, end: true },
+  { to: '/', label: 'Reportes', icon: LayoutDashboard, end: true },
   { to: '/pedidos', label: 'Pedidos', icon: Receipt },
   { to: '/clientes', label: 'Clientes', icon: Contact },
   { to: '/empleados', label: 'Empleados', icon: Users },
@@ -44,7 +44,7 @@ const navigation = [
 ];
 
 const routeTitles = {
-  '/': 'Inicio',
+  '/': 'Reportes',
   '/clientes': 'Clientes',
   '/empleados': 'Empleados',
   '/sucursales': 'Sucursales',
@@ -79,7 +79,6 @@ function SidebarContent({ onNavigate }) {
         aria-label="Navegación principal"
       >
         <p className="px-3 pb-2 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-cream/45">
-          Operación
         </p>
 
         <div className="space-y-1">

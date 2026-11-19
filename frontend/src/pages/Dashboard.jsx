@@ -137,7 +137,7 @@ export default function Dashboard() {
   return (
     <div>
       <PageHeader
-        title="Inicio"
+        title="Reportes"
         description="Resumen de ventas, caja e inventario de Artextilo."
       />
 

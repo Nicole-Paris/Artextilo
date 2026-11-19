@@ -41,7 +41,6 @@ const ESTADOS = [
 
 const ESTADOS_PAGO = [
   { value: 'pendiente', label: 'Pendiente' },
-  { value: 'parcial', label: 'Parcial' },
   { value: 'liquidado', label: 'Liquidado' },
 ];
 
@@ -60,6 +59,7 @@ const FORMAS_ENTREGA = [
 
 const EMPTY_FORM = {
   id_cliente: '',
+  cliente_texto: '',
   id_empleado: '',
   id_sucursal: '',
   origen: 'presencial',
@@ -82,6 +82,21 @@ const EMPTY_FORM = {
     id_empleado: '',
   },
 };
+
+function formatClienteOption(cliente) {
+  const fullName = [cliente.nombre, cliente.apellido_paterno, cliente.apellido_materno]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  return cliente.telefono ? `${fullName} · ${cliente.telefono}` : fullName;
+}
+
+function formatProductoOption(item) {
+  const variants = [item.producto_color, item.producto_talla].filter(Boolean).join(' · ');
+  return variants
+    ? `${item.producto_nombre} · ${variants} · stock ${item.stock_actual}`
+    : `${item.producto_nombre} · stock ${item.stock_actual}`;
+}
 
 function estadoLabel(estado) {
   return ESTADOS.find((item) => item.value === estado)?.label ?? estado;
@@ -204,7 +219,6 @@ export default function PedidosPage() {
   const [search, setSearch] = useState('');
   const [filtroEstado, setFiltroEstado] = useState('');
   const [filtroPago, setFiltroPago] = useState('');
-  const [filtroSucursal, setFiltroSucursal] = useState('');
   const debouncedSearch = useDebouncedValue(search, 300);
 
   const [clientes, setClientes] = useState([]);
@@ -255,6 +269,73 @@ export default function PedidosPage() {
   });
   const [savingCancel, setSavingCancel] = useState(false);
 
+  const resolveDefaultContext = useCallback(() => {
+    const empleado = empleados.find((item) => isCashier(item)) ?? empleados[0];
+    const idEmpleado = empleado ? String(empleado.id_empleado) : '';
+    const idSucursal = empleado?.id_sucursal
+      ? String(empleado.id_sucursal)
+      : sucursales[0]?.id_sucursal
+        ? String(sucursales[0].id_sucursal)
+        : '';
+
+    return { idEmpleado, idSucursal };
+  }, [empleados, sucursales]);
+
+  const matchClienteFromText = useCallback(
+    (texto) => {
+      const normalized = texto.trim().toLowerCase();
+      if (!normalized) return null;
+
+      return (
+        clientes.find((cliente) => {
+          const etiqueta = formatClienteOption(cliente).toLowerCase();
+          const nombreCompleto = [
+            cliente.nombre,
+            cliente.apellido_paterno,
+            cliente.apellido_materno,
+          ]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase();
+          const telefono = String(cliente.telefono || '').toLowerCase();
+
+          return (
+            etiqueta === normalized ||
+            nombreCompleto === normalized ||
+            (telefono && telefono === normalized)
+          );
+        }) ?? null
+      );
+    },
+    [clientes],
+  );
+
+  const productosDisponibles = useMemo(
+    () =>
+      inventario.filter(
+        (item) =>
+          Number(item.stock_actual) > 0 &&
+          (!item.producto_estado || item.producto_estado === 'activo'),
+      ),
+    [inventario],
+  );
+
+  const matchProductoFromText = useCallback(
+    (texto) => {
+      const normalized = texto.trim().toLowerCase();
+      if (!normalized) return null;
+
+      return (
+        productosDisponibles.find((item) => {
+          const etiqueta = formatProductoOption(item).toLowerCase();
+          const nombre = String(item.producto_nombre || '').toLowerCase();
+          return etiqueta === normalized || nombre === normalized;
+        }) ?? null
+      );
+    },
+    [productosDisponibles],
+  );
+
   const loadPedidos = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -264,7 +345,6 @@ export default function PedidosPage() {
       if (debouncedSearch) filters.search = debouncedSearch;
       if (filtroEstado) filters.estado = filtroEstado;
       if (filtroPago) filters.estado_pago = filtroPago;
-      if (filtroSucursal) filters.id_sucursal = filtroSucursal;
 
       const [pedidosRes, statsRes] = await Promise.all([
         pedidosApi.list(filters),
@@ -278,7 +358,7 @@ export default function PedidosPage() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, filtroEstado, filtroPago, filtroSucursal]);
+  }, [debouncedSearch, filtroEstado, filtroPago]);
 
   useEffect(() => {
     loadPedidos();
@@ -302,6 +382,35 @@ export default function PedidosPage() {
 
     loadCatalogs();
   }, []);
+
+  useEffect(() => {
+    if (!createOpen) return;
+
+    const { idEmpleado, idSucursal } = resolveDefaultContext();
+    setCreateForm((current) => {
+      const nextEmpleado = current.id_empleado || idEmpleado;
+      const nextSucursal = current.id_sucursal || idSucursal;
+      const nextPagoEmpleado = current.pago_inicial.id_empleado || nextEmpleado;
+
+      if (
+        nextEmpleado === current.id_empleado &&
+        nextSucursal === current.id_sucursal &&
+        nextPagoEmpleado === current.pago_inicial.id_empleado
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+        id_empleado: nextEmpleado,
+        id_sucursal: nextSucursal,
+        pago_inicial: {
+          ...current.pago_inicial,
+          id_empleado: nextPagoEmpleado,
+        },
+      };
+    });
+  }, [createOpen, resolveDefaultContext]);
 
   useEffect(() => {
     if (!createOpen || !createForm.id_sucursal) {
@@ -394,16 +503,19 @@ export default function PedidosPage() {
 
   const totals = useMemo(() => {
     const productosDetalle = createForm.productos.map((row) => {
-      const item = inventario.find(
-        (inventarioItem) =>
-          String(inventarioItem.id_producto) === String(row.id_producto),
-      );
-      const precio = Number(item?.producto_precio || 0);
+      const matchedItem =
+        productosDisponibles.find(
+          (inventarioItem) =>
+            String(inventarioItem.id_producto) === String(row.id_producto),
+        ) ?? matchProductoFromText(row.producto_texto || '');
+
+      const precio = Number(matchedItem?.producto_precio || 0);
       const cantidad = Number(row.cantidad || 0);
 
       return {
         ...row,
-        item,
+        id_producto: matchedItem ? String(matchedItem.id_producto) : row.id_producto,
+        item: matchedItem,
         precio,
         subtotal: precio * cantidad,
       };
@@ -456,7 +568,12 @@ export default function PedidosPage() {
       montoInicial,
       saldoDespues: Math.max(total - montoInicial, 0),
     };
-  }, [createForm, inventario]);
+  }, [createForm.productos, createForm.servicios, createForm.descuento_tipo, createForm.descuento_monto, createForm.forma_entrega, createForm.costo_envio, createForm.pago_inicial.monto, productosDisponibles, matchProductoFromText]);
+
+  const effectiveEmpleadoId =
+    createForm.pago_inicial.id_empleado ||
+    createForm.id_empleado ||
+    resolveDefaultContext().idEmpleado;
 
   const createPagoErrors = {};
   if (totals.total > 0) {
@@ -483,8 +600,9 @@ export default function PedidosPage() {
         'La referencia es obligatoria para transferencias.';
     }
 
-    if (!createForm.pago_inicial.id_empleado) {
-      createPagoErrors.id_empleado = 'Selecciona al empleado que recibe el pago.';
+    if (!effectiveEmpleadoId) {
+      createPagoErrors.id_empleado =
+        'No se pudo detectar automáticamente un empleado responsable.';
     }
   }
   const visibleCreatePagoErrors = Object.fromEntries(
@@ -494,29 +612,18 @@ export default function PedidosPage() {
   );
   const hasCreatePagoErrors = Object.values(createPagoErrors).some(Boolean);
 
-  const productosDisponibles = useMemo(
-    () =>
-      inventario.filter(
-        (item) =>
-          Number(item.stock_actual) > 0 &&
-          (!item.producto_estado || item.producto_estado === 'activo'),
-      ),
-    [inventario],
-  );
-
   function abrirNuevoPedido() {
-    const empleado =
-      empleados.find((item) => isCashier(item)) ?? empleados[0];
-    const cliente = clientes[0];
+    const { idEmpleado, idSucursal } = resolveDefaultContext();
 
     setCreateForm({
       ...EMPTY_FORM,
-      id_cliente: cliente ? String(cliente.id_cliente) : '',
-      id_empleado: empleado ? String(empleado.id_empleado) : '',
-      id_sucursal: empleado ? String(empleado.id_sucursal) : '',
+      id_cliente: '',
+      cliente_texto: '',
+      id_empleado: idEmpleado,
+      id_sucursal: idSucursal,
       pago_inicial: {
         ...EMPTY_FORM.pago_inicial,
-        id_empleado: empleado ? String(empleado.id_empleado) : '',
+        id_empleado: idEmpleado,
       },
     });
     setCreateError('');
@@ -527,24 +634,6 @@ export default function PedidosPage() {
   function handleFormChange(field, value) {
     setCreateForm((current) => {
       const next = { ...current, [field]: value };
-
-      if (field === 'id_empleado') {
-        const empleado = empleados.find(
-          (item) => String(item.id_empleado) === String(value),
-        );
-        if (empleado) {
-          next.id_sucursal = String(empleado.id_sucursal);
-          next.productos = [];
-          next.pago_inicial = {
-            ...current.pago_inicial,
-            id_empleado: String(empleado.id_empleado),
-          };
-        }
-      }
-
-      if (field === 'id_sucursal') {
-        next.productos = [];
-      }
 
       if (field === 'forma_entrega' && value === 'en_local') {
         next.costo_envio = 0;
@@ -561,26 +650,40 @@ export default function PedidosPage() {
     });
   }
 
-  function handlePagoInicialChange(field, value) {
+  function handleClienteTextoChange(value) {
+    const matched = matchClienteFromText(value);
     setCreateForm((current) => ({
       ...current,
-      pago_inicial: {
-        ...current.pago_inicial,
-        [field]: value,
-      },
+      cliente_texto: value,
+      id_cliente: matched ? String(matched.id_cliente) : '',
     }));
   }
 
-  function handleAddProducto() {
-    const selectedIds = new Set(
-      createForm.productos.map((item) => String(item.id_producto)),
-    );
-    const available = productosDisponibles.find(
-      (item) => !selectedIds.has(String(item.id_producto)),
-    );
+  function handlePagoInicialChange(field, value) {
+    setCreateForm((current) => {
+      const nextPagoInicial = {
+        ...current.pago_inicial,
+        [field]: value,
+      };
 
-    if (!available) {
-      setCreateError('No hay más productos con existencias disponibles en esta sucursal.');
+      if (field === 'metodo_pago' && value !== 'transferencia') {
+        nextPagoInicial.referencia = '';
+      }
+
+      return {
+        ...current,
+        pago_inicial: nextPagoInicial,
+      };
+    });
+
+    if (field === 'metodo_pago' && value !== 'transferencia') {
+      setCreatePagoTouched((current) => ({ ...current, referencia: false }));
+    }
+  }
+
+  function handleAddProducto() {
+    if (!createForm.id_sucursal) {
+      setCreateError('Esperando sucursal para consultar el inventario.');
       return;
     }
 
@@ -589,16 +692,20 @@ export default function PedidosPage() {
       ...current,
       productos: [
         ...current.productos,
-        { id_producto: String(available.id_producto), cantidad: 1 },
+        { id_producto: '', producto_texto: '', cantidad: 1 },
       ],
     }));
   }
 
-  function handleProductoChange(index, value) {
-    const duplicate = createForm.productos.some(
-      (item, itemIndex) =>
-        itemIndex !== index && String(item.id_producto) === String(value),
-    );
+  function handleProductoTextoChange(index, value) {
+    const matched = matchProductoFromText(value);
+    const duplicate =
+      matched &&
+      createForm.productos.some(
+        (item, itemIndex) =>
+          itemIndex !== index &&
+          String(item.id_producto || '') === String(matched.id_producto),
+      );
 
     if (duplicate) {
       setCreateError('Ese producto ya está agregado en el pedido.');
@@ -609,7 +716,13 @@ export default function PedidosPage() {
     setCreateForm((current) => ({
       ...current,
       productos: current.productos.map((item, itemIndex) =>
-        itemIndex === index ? { ...item, id_producto: value } : item,
+        itemIndex === index
+          ? {
+              ...item,
+              producto_texto: value,
+              id_producto: matched ? String(matched.id_producto) : '',
+            }
+          : item,
       ),
     }));
   }
@@ -664,8 +777,23 @@ export default function PedidosPage() {
   async function handleCrearPedido(event) {
     event.preventDefault();
 
-    if (!createForm.id_cliente || !createForm.id_empleado || !createForm.id_sucursal) {
-      setCreateError('Selecciona cliente, empleado y sucursal.');
+    const fallbackContext = resolveDefaultContext();
+    const idEmpleadoFinal = createForm.id_empleado || fallbackContext.idEmpleado;
+    const idSucursalFinal = createForm.id_sucursal || fallbackContext.idSucursal;
+    const matchedCliente =
+      clientes.find((item) => String(item.id_cliente) === String(createForm.id_cliente)) ??
+      matchClienteFromText(createForm.cliente_texto);
+    const clienteTextoLimpio = createForm.cliente_texto.trim();
+
+    if (!matchedCliente && !clienteTextoLimpio) {
+      setCreateError('Escribe el nombre o teléfono del cliente.');
+      return;
+    }
+
+    if (!idEmpleadoFinal || !idSucursalFinal) {
+      setCreateError(
+        'No se pudo determinar automáticamente el empleado o la sucursal del sistema.',
+      );
       return;
     }
 
@@ -676,7 +804,9 @@ export default function PedidosPage() {
 
     for (const [index, row] of totals.productosDetalle.entries()) {
       if (!row.item) {
-        setCreateError(`El producto de la fila ${index + 1} no está disponible.`);
+        setCreateError(
+          `Escribe un producto válido con existencia en la fila ${index + 1}.`,
+        );
         return;
       }
 
@@ -735,8 +865,11 @@ export default function PedidosPage() {
       pagoInicial = {
         monto,
         metodo_pago: createForm.pago_inicial.metodo_pago,
-        referencia: createForm.pago_inicial.referencia.trim() || null,
-        id_empleado: Number(createForm.pago_inicial.id_empleado),
+        referencia:
+          createForm.pago_inicial.metodo_pago === 'transferencia'
+            ? createForm.pago_inicial.referencia.trim() || null
+            : null,
+        id_empleado: Number(createForm.pago_inicial.id_empleado || idEmpleadoFinal),
       };
     }
 
@@ -746,9 +879,10 @@ export default function PedidosPage() {
       setSuccess('');
 
       await pedidosApi.create({
-        id_cliente: Number(createForm.id_cliente),
-        id_empleado: Number(createForm.id_empleado),
-        id_sucursal: Number(createForm.id_sucursal),
+        id_cliente: matchedCliente ? Number(matchedCliente.id_cliente) : null,
+        cliente_nombre: matchedCliente ? undefined : clienteTextoLimpio,
+        id_empleado: Number(idEmpleadoFinal),
+        id_sucursal: Number(idSucursalFinal),
         origen: createForm.origen,
         condicion_pago: createForm.condicion_pago,
         forma_entrega: createForm.forma_entrega,
@@ -777,9 +911,9 @@ export default function PedidosPage() {
             ? Number(createForm.id_descuento_autoriza)
             : null,
         observaciones: createForm.observaciones.trim() || null,
-        productos: createForm.productos.map((item) => ({
-          id_producto: Number(item.id_producto),
-          cantidad: Number(item.cantidad),
+        productos: totals.productosDetalle.map((row) => ({
+          id_producto: Number(row.item.id_producto),
+          cantidad: Number(row.cantidad),
         })),
         servicios: serviciosValidos.map((servicio) => ({
           tipo: servicio.tipo,
@@ -1016,7 +1150,7 @@ export default function PedidosPage() {
         title="Pedidos"
         description="Registra ventas, apartados y servicios de bordado; controla pagos, entregas y cancelaciones."
       >
-        <Button onClick={abrirNuevoPedido} disabled={clientes.length === 0 || empleados.length === 0}>
+        <Button onClick={abrirNuevoPedido} disabled={empleados.length === 0}>
           <Plus className="h-4 w-4" aria-hidden="true" />
           Nuevo pedido
         </Button>
@@ -1074,7 +1208,7 @@ export default function PedidosPage() {
       </div>
 
       <div className="mt-7 rounded-2xl border border-line bg-paper p-4 shadow-soft">
-        <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto_auto_auto] lg:items-end">
+        <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto] lg:items-end">
           <Field label="Buscar" htmlFor="pedido-buscar">
             <div className="relative">
               <Search
@@ -1123,27 +1257,6 @@ export default function PedidosPage() {
               ))}
             </select>
           </Field>
-
-          <Field label="Sucursal" htmlFor="pedido-sucursal">
-            <select
-              id="pedido-sucursal"
-              className={inputClass()}
-              value={filtroSucursal}
-              onChange={(event) => setFiltroSucursal(event.target.value)}
-            >
-              <option value="">Todas</option>
-              {sucursales.map((sucursal) => (
-                <option key={sucursal.id_sucursal} value={sucursal.id_sucursal}>
-                  {sucursal.nombre}
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          <Button variant="secondary" onClick={loadPedidos} loading={loading}>
-            <RefreshCw className="h-4 w-4" aria-hidden="true" />
-            Actualizar
-          </Button>
         </div>
       </div>
 
@@ -1160,7 +1273,7 @@ export default function PedidosPage() {
             title="No hay pedidos que coincidan"
             description="Cambia los filtros o registra el primer pedido para empezar a vender."
             action={
-              <Button onClick={abrirNuevoPedido} disabled={clientes.length === 0 || empleados.length === 0}>
+              <Button onClick={abrirNuevoPedido} disabled={empleados.length === 0}>
                 <Plus className="h-4 w-4" aria-hidden="true" />
                 Nuevo pedido
               </Button>
@@ -1306,7 +1419,7 @@ export default function PedidosPage() {
                     </Button>
                     {puedeCobrar(pedido) && (
                       <Button size="sm" onClick={() => abrirPago(pedido)}>
-                          Registrar pago
+                        Registrar pago
                       </Button>
                     )}
                     {puedeCambiarEstado(pedido) && (
@@ -1365,19 +1478,6 @@ export default function PedidosPage() {
         <form id="form-nuevo-pedido" className="space-y-6" onSubmit={handleCrearPedido}>
           {createError && <Alert>{createError}</Alert>}
 
-          {clientes.length === 0 && (
-            <Alert>
-              <p className="font-semibold">No hay clientes registrados.</p>
-              <p className="mt-1">
-                Registra un cliente en{' '}
-                <Link to="/clientes?nuevo=1" className="font-semibold underline">
-                  Clientes
-                </Link>{' '}
-                antes de crear un pedido.
-              </p>
-            </Alert>
-          )}
-
           {empleados.length === 0 && (
             <Alert>
               <p className="font-semibold">No hay empleados activos.</p>
@@ -1391,61 +1491,37 @@ export default function PedidosPage() {
             </Alert>
           )}
 
+          <datalist id="lista-clientes-sugeridos">
+            {clientes.map((cliente) => (
+              <option key={cliente.id_cliente} value={formatClienteOption(cliente)} />
+            ))}
+          </datalist>
+
+          <datalist id="lista-productos-sugeridos">
+            {productosDisponibles.map((item) => (
+              <option key={item.id_inventario} value={formatProductoOption(item)} />
+            ))}
+          </datalist>
+
           <section className="space-y-4">
-            <h3 className="font-display text-lg font-semibold text-ink">Cliente y responsable</h3>
+            <h3 className="font-display text-lg font-semibold text-ink">Cliente y origen</h3>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Cliente" htmlFor="pedido-cliente">
-                <select
-                  id="pedido-cliente"
-                  className={inputClass()}
-                  value={createForm.id_cliente}
-                  onChange={(event) => handleFormChange('id_cliente', event.target.value)}
-                  required
-                >
-                  <option value="">Selecciona un cliente</option>
-                  {clientes.map((cliente) => (
-                    <option key={cliente.id_cliente} value={cliente.id_cliente}>
-                      {cliente.nombre} {cliente.apellido_paterno} · {cliente.telefono}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-
-              <Field label="Empleado" htmlFor="pedido-empleado">
-                <select
-                  id="pedido-empleado"
-                  className={inputClass()}
-                  value={createForm.id_empleado}
-                  onChange={(event) => handleFormChange('id_empleado', event.target.value)}
-                  required
-                >
-                  <option value="">Selecciona un empleado</option>
-                  {empleados.map((empleado) => (
-                    <option key={empleado.id_empleado} value={empleado.id_empleado}>
-                      {empleado.nombre} {empleado.apellido_paterno} · {empleado.sucursal}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-
               <Field
-                label="Sucursal"
-                htmlFor="pedido-sucursal-form"
-                hint="Se asigna automáticamente según el empleado."
+                label="Cliente"
+                htmlFor="pedido-cliente"
+                hint="Escribe nombre o teléfono del cliente."
               >
-                <select
-                  id="pedido-sucursal-form"
+                <input
+                  id="pedido-cliente"
+                  type="text"
+                  list="lista-clientes-sugeridos"
+                  maxLength={150}
                   className={inputClass()}
-                  value={createForm.id_sucursal}
-                  disabled
-                >
-                  <option value="">Selecciona una sucursal</option>
-                  {sucursales.map((sucursal) => (
-                    <option key={sucursal.id_sucursal} value={sucursal.id_sucursal}>
-                      {sucursal.nombre}
-                    </option>
-                  ))}
-                </select>
+                  value={createForm.cliente_texto}
+                  onChange={(event) => handleClienteTextoChange(event.target.value)}
+                  placeholder="Ej. María López · 9221234567"
+                  required
+                />
               </Field>
 
               <Field label="Origen" htmlFor="pedido-origen">
@@ -1554,14 +1630,14 @@ export default function PedidosPage() {
               <div>
                 <h3 className="font-display text-lg font-semibold text-ink">Productos</h3>
                 <p className="text-xs text-muted">
-                  El stock se descuenta al crear el pedido.
+                  Escribe el producto; el stock se descuenta al crear el pedido.
                 </p>
               </div>
               <Button
                 variant="secondary"
                 size="sm"
                 onClick={handleAddProducto}
-                disabled={!createForm.id_sucursal || productosDisponibles.length === 0}
+                disabled={!createForm.id_sucursal}
               >
                 <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                 Agregar producto
@@ -1571,32 +1647,38 @@ export default function PedidosPage() {
             {createForm.productos.length === 0 ? (
               <div className="rounded-xl border border-dashed border-line px-4 py-6 text-center text-sm text-muted">
                 {createForm.id_sucursal
-                  ? 'Agrega al menos un producto con existencias.'
-                  : 'Selecciona una sucursal para consultar el inventario.'}
+                  ? 'Agrega al menos un producto y escríbelo para buscarlo.'
+                  : 'Cargando inventario de la sucursal…'}
               </div>
             ) : (
               <div className="space-y-2">
                 {totals.productosDetalle.map((row, index) => (
                   <div
-                    key={`${row.id_producto}-${index}`}
+                    key={index}
                     className="grid gap-2 rounded-xl border border-line p-3 sm:grid-cols-[1fr_7rem_7rem_auto] sm:items-end"
                   >
-                    <Field label="Producto" htmlFor={`producto-${index}`}>
-                      <select
+                    <Field
+                      label="Producto"
+                      htmlFor={`producto-${index}`}
+                      hint={
+                        row.item
+                          ? `Stock disponible: ${row.item.stock_actual}`
+                          : row.producto_texto
+                            ? 'Producto no encontrado o sin stock'
+                            : 'Escribe nombre, color o talla'
+                      }
+                    >
+                      <input
                         id={`producto-${index}`}
+                        type="text"
+                        list="lista-productos-sugeridos"
                         className={inputClass()}
-                        value={row.id_producto}
+                        value={row.producto_texto ?? ''}
                         onChange={(event) =>
-                          handleProductoChange(index, event.target.value)
+                          handleProductoTextoChange(index, event.target.value)
                         }
-                      >
-                        <option value="">Selecciona un producto</option>
-                        {productosDisponibles.map((item) => (
-                          <option key={item.id_inventario} value={item.id_producto}>
-                            {item.producto_nombre} · {item.producto_color} · {item.producto_talla} · stock {item.stock_actual}
-                          </option>
-                        ))}
-                      </select>
+                        placeholder="Escribe el producto…"
+                      />
                     </Field>
 
                     <Field label="Cantidad" htmlFor={`cantidad-${index}`}>
@@ -1816,6 +1898,29 @@ export default function PedidosPage() {
               El anticipo del 50% es obligatorio; también puedes liquidar el total.
             </p>
 
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  handlePagoInicialChange('monto', String(totals.anticipo));
+                  setCreatePagoTouched((current) => ({ ...current, monto: true }));
+                }}
+              >
+                Usar anticipo 50%
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  handlePagoInicialChange('monto', String(totals.total));
+                  setCreatePagoTouched((current) => ({ ...current, monto: true }));
+                }}
+              >
+                Liquidar total
+              </Button>
+            </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <Field
                 label="Monto"
@@ -1857,87 +1962,39 @@ export default function PedidosPage() {
                 </select>
               </Field>
 
-              <Field
-                label="Referencia"
-                htmlFor="pedido-pago-referencia"
-                error={visibleCreatePagoErrors.referencia}
-              >
-                <input
-                  id="pedido-pago-referencia"
-                  type="text"
-                  maxLength={50}
-                  className={inputClass(visibleCreatePagoErrors.referencia)}
-                  value={createForm.pago_inicial.referencia}
-                  onChange={(event) =>
-                    handlePagoInicialChange('referencia', event.target.value)
-                  }
-                  onBlur={() =>
-                    setCreatePagoTouched((current) => ({
-                      ...current,
-                      referencia: true,
-                    }))
-                  }
-                  placeholder="Folio o referencia de transferencia"
-                />
-              </Field>
-
-              <Field
-                label="Empleado que recibe"
-                htmlFor="pedido-pago-empleado"
-                error={visibleCreatePagoErrors.id_empleado}
-              >
-                <select
-                  id="pedido-pago-empleado"
-                  className={inputClass(visibleCreatePagoErrors.id_empleado)}
-                  value={createForm.pago_inicial.id_empleado}
-                  onChange={(event) =>
-                    handlePagoInicialChange('id_empleado', event.target.value)
-                  }
-                  onBlur={() =>
-                    setCreatePagoTouched((current) => ({
-                      ...current,
-                      id_empleado: true,
-                    }))
-                  }
+              {createForm.pago_inicial.metodo_pago === 'transferencia' && (
+                <Field
+                  label="Referencia"
+                  htmlFor="pedido-pago-referencia"
+                  error={visibleCreatePagoErrors.referencia}
+                  className="sm:col-span-2"
                 >
-                  <option value="">Selecciona quién recibe</option>
-                  {empleados.map((empleado) => (
-                    <option key={empleado.id_empleado} value={empleado.id_empleado}>
-                      {empleado.nombre} {empleado.apellido_paterno}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-
-              <div className="flex flex-wrap items-end gap-2 sm:col-span-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    handlePagoInicialChange('monto', String(totals.anticipo));
-                    setCreatePagoTouched((current) => ({ ...current, monto: true }));
-                  }}
-                >
-                  Usar anticipo 50%
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    handlePagoInicialChange('monto', String(totals.total));
-                    setCreatePagoTouched((current) => ({ ...current, monto: true }));
-                  }}
-                >
-                  Liquidar total
-                </Button>
-              </div>
+                  <input
+                    id="pedido-pago-referencia"
+                    type="text"
+                    maxLength={50}
+                    className={inputClass(visibleCreatePagoErrors.referencia)}
+                    value={createForm.pago_inicial.referencia}
+                    onChange={(event) =>
+                      handlePagoInicialChange('referencia', event.target.value)
+                    }
+                    onBlur={() =>
+                      setCreatePagoTouched((current) => ({
+                        ...current,
+                        referencia: true,
+                      }))
+                    }
+                    placeholder="Folio o referencia de transferencia"
+                  />
+                </Field>
+              )}
             </div>
 
             {checkingCaja ? (
               <p className="text-xs text-muted">Verificando caja abierta…</p>
             ) : !cajaAbierta ? (
               <Alert>
-                <p className="font-semibold">El empleado no tiene una caja abierta.</p>
+                <p className="font-semibold">No hay una caja abierta para el turno actual.</p>
                 <p className="mt-1">
                   Abre una caja en{' '}
                   <Link to="/caja" className="font-semibold underline">
