@@ -39,6 +39,40 @@ export async function loginEmpleado({ correo, contrasena }) {
 
   const { contrasena: password, ...datosEmpleado } = empleado;
 
+  // Obtener las sucursales asignadas al empleado (o todas las activas si es administrador)
+  let sucursalesAsignadas = [];
+  const esAdmin = ['administrador', 'admin'].includes(String(empleado.rol || '').trim().toLowerCase());
+
+  if (esAdmin) {
+    const [todasSucursales] = await pool.execute(
+      `SELECT id_sucursal, nombre FROM sucursal WHERE deleted_at IS NULL AND estado = 'activa' ORDER BY nombre ASC`
+    );
+    sucursalesAsignadas = todasSucursales;
+  } else {
+    // Si tiene la tabla sucursal_empleado o sucursales múltiples
+    try {
+      const [sucursalesEmp] = await pool.execute(
+        `SELECT s.id_sucursal, s.nombre 
+         FROM sucursal_empleado se
+         INNER JOIN sucursal s ON s.id_sucursal = se.id_sucursal
+         WHERE se.id_empleado = ? AND s.deleted_at IS NULL AND s.estado = 'activa'
+         ORDER BY s.nombre ASC`,
+        [empleado.id_empleado]
+      );
+      if (sucursalesEmp.length > 0) {
+        sucursalesAsignadas = sucursalesEmp;
+      }
+    } catch {
+      // Si no existe la tabla relacional, se toma la sucursal directa
+    }
+
+    if (sucursalesAsignadas.length === 0 && empleado.id_sucursal) {
+      sucursalesAsignadas = [{ id_sucursal: empleado.id_sucursal, nombre: empleado.sucursal }];
+    }
+  }
+
+  datosEmpleado.sucursales = sucursalesAsignadas;
+
   return datosEmpleado;
 }
 
@@ -219,4 +253,65 @@ export async function restablecerPassword({ correo, codigo, nueva_contrasena }) 
     success: true,
     message: 'Contraseña actualizada correctamente. Ya puedes iniciar sesión con tu nueva contraseña.',
   };
+}
+
+export async function actualizarPerfil({ id_empleado, correo, contrasena_actual, nueva_contrasena }) {
+  const [empleados] = await pool.execute(
+    `SELECT e.id_empleado, e.nombre, e.apellido_paterno, e.apellido_materno,
+            e.correo, e.contrasena, e.estado, e.id_rol, r.nombre AS rol,
+            e.id_sucursal, s.nombre AS sucursal
+     FROM empleado e
+     INNER JOIN rol r ON r.id_rol = e.id_rol
+     INNER JOIN sucursal s ON s.id_sucursal = e.id_sucursal
+     WHERE e.id_empleado = ? AND e.deleted_at IS NULL
+     LIMIT 1`,
+    [id_empleado],
+  );
+
+  if (empleados.length === 0) {
+    throw ApiError.notFound('Empleado no encontrado');
+  }
+
+  const empleado = empleados[0];
+
+  // Verificar si el correo ya existe en otro empleado
+  const [existentes] = await pool.execute(
+    `SELECT id_empleado FROM empleado WHERE LOWER(correo) = LOWER(?) AND id_empleado <> ? AND deleted_at IS NULL LIMIT 1`,
+    [correo, id_empleado],
+  );
+
+  if (existentes.length > 0) {
+    throw ApiError.conflict('El correo ya está registrado por otro empleado');
+  }
+
+  let nuevoPasswordHash = empleado.contrasena;
+
+  if (nueva_contrasena && nueva_contrasena.trim()) {
+    if (!contrasena_actual) {
+      throw ApiError.badRequest('Debes ingresar tu contraseña actual para cambiarla');
+    }
+
+    const passwordValida = await bcrypt.compare(contrasena_actual, empleado.contrasena);
+    if (!passwordValida) {
+      throw ApiError.badRequest('La contraseña actual es incorrecta');
+    }
+
+    if (nueva_contrasena.length < 6) {
+      throw ApiError.badRequest('La nueva contraseña debe tener al menos 6 caracteres');
+    }
+
+    nuevoPasswordHash = await bcrypt.hash(nueva_contrasena, 10);
+  }
+
+  await pool.execute(
+    `UPDATE empleado SET correo = ?, contrasena = ?, updated_at = NOW() WHERE id_empleado = ?`,
+    [correo, nuevoPasswordHash, id_empleado],
+  );
+
+  const { contrasena, ...datosActualizados } = {
+    ...empleado,
+    correo,
+  };
+
+  return datosActualizados;
 }

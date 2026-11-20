@@ -2,7 +2,7 @@ import { pool } from '../../config/db.js';
 import { ApiError } from '../../lib/ApiError.js';
 
 const BASE_SELECT = `
-  SELECT id_sucursal, nombre, direccion, codigo_postal, telefono, horario,
+  SELECT id_sucursal, nombre, direccion, ciudad, estado_republica, codigo_postal, telefono, horario,
          created_at, updated_at, deleted_at
   FROM sucursal
 `;
@@ -63,7 +63,16 @@ export async function getSucursalDependencies(id) {
 }
 
 export async function createSucursal(payload) {
-  const { nombre, direccion, codigo_postal, telefono, horario } = payload;
+  const {
+    nombre,
+    direccion,
+    ciudad = 'Oaxaca de Juárez',
+    estado_republica = 'Oaxaca',
+    codigo_postal,
+    telefono,
+    horario,
+    empleados_ids = [],
+  } = payload;
 
   const [existing] = await pool.execute(
     'SELECT id_sucursal FROM sucursal WHERE deleted_at IS NULL AND LOWER(nombre) = LOWER(?) LIMIT 1',
@@ -74,17 +83,65 @@ export async function createSucursal(payload) {
     throw ApiError.conflict('Ya existe una sucursal con ese nombre');
   }
 
-  const [result] = await pool.execute(
-    `INSERT INTO sucursal (nombre, direccion, codigo_postal, telefono, horario)
-     VALUES (?, ?, ?, ?, ?)`,
-    [nombre, direccion, codigo_postal, telefono, horario],
-  );
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
 
-  return getSucursal(result.insertId);
+    const [result] = await connection.execute(
+      `INSERT INTO sucursal (nombre, direccion, ciudad, estado_republica, codigo_postal, telefono, horario)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        nombre,
+        direccion,
+        ciudad || 'Oaxaca de Juárez',
+        estado_republica || 'Oaxaca',
+        codigo_postal,
+        telefono,
+        horario,
+      ],
+    );
+
+    const idSucursal = result.insertId;
+
+    if (Array.isArray(empleados_ids) && empleados_ids.length > 0) {
+      // Asignar los empleados seleccionados a esta nueva sucursal
+      for (const idEmpleado of empleados_ids) {
+        await connection.execute(
+          `UPDATE empleado SET id_sucursal = ?, updated_at = NOW() WHERE id_empleado = ? AND deleted_at IS NULL`,
+          [idSucursal, idEmpleado],
+        );
+      }
+    }
+
+    // Inicializar automáticamente el inventario de esta nueva sucursal con todos los productos activos
+    await connection.execute(
+      `INSERT INTO inventario (id_producto, id_sucursal, stock_actual, stock_minimo)
+       SELECT p.id_producto, ?, 0, 5
+       FROM producto p
+       WHERE p.deleted_at IS NULL AND p.estado = 'activo'`,
+      [idSucursal],
+    );
+
+    await connection.commit();
+    return getSucursal(idSucursal);
+  } catch (err) {
+    await connection.rollback();
+    throw err;
+  } finally {
+    connection.release();
+  }
 }
 
 export async function updateSucursal(id, payload) {
-  const { nombre, direccion, codigo_postal, telefono, horario } = payload;
+  const {
+    nombre,
+    direccion,
+    ciudad = 'Oaxaca de Juárez',
+    estado_republica = 'Oaxaca',
+    codigo_postal,
+    telefono,
+    horario,
+  } = payload;
 
   await getSucursal(id);
 
@@ -102,9 +159,18 @@ export async function updateSucursal(id, payload) {
 
   await pool.execute(
     `UPDATE sucursal
-     SET nombre = ?, direccion = ?, codigo_postal = ?, telefono = ?, horario = ?
+     SET nombre = ?, direccion = ?, ciudad = ?, estado_republica = ?, codigo_postal = ?, telefono = ?, horario = ?
      WHERE id_sucursal = ?`,
-    [nombre, direccion, codigo_postal, telefono, horario, id],
+    [
+      nombre,
+      direccion,
+      ciudad || 'Oaxaca de Juárez',
+      estado_republica || 'Oaxaca',
+      codigo_postal,
+      telefono,
+      horario,
+      id,
+    ],
   );
 
   return getSucursal(id);

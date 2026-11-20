@@ -64,7 +64,7 @@ function isValidPassword(password) {
   );
 }
 
-export function validateForm(form, { editing }) {
+function validateForm(form, { editing }) {
   const errors = {};
 
   if (!form.nombre.trim()) {

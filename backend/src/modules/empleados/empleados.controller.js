@@ -3,6 +3,7 @@ import {
   empleadoEstadoSchema,
   empleadoIdSchema,
   empleadoPayloadSchema,
+  empleadoSucursalSchema,
 } from './empleados.schema.js';
 import {
   archiveEmpleado,
@@ -11,6 +12,7 @@ import {
   listEmpleados,
   restoreEmpleado,
   updateEstadoEmpleado,
+  updateSucursalEmpleado,
   updateEmpleado,
 } from './empleados.service.js';
 
@@ -59,4 +61,11 @@ export async function updateEstado(req, res) {
     ? 'Empleado activado correctamente'
     : 'Empleado desactivado correctamente';
   res.json({ data: empleado, message });
+}
+
+export async function updateSucursal(req, res) {
+  const id = empleadoIdSchema.parse(req.params.id);
+  const { id_sucursal } = empleadoSucursalSchema.parse(req.body);
+  const empleado = await updateSucursalEmpleado(id, id_sucursal);
+  res.json({ data: empleado, message: 'Sucursal de empleado actualizada correctamente' });
 }

@@ -68,7 +68,23 @@ export default function InventarioPage() {
   const [productos, setProductos] = useState([]);
   const [categorias, setCategorias] = useState([]);
 
-  const selectedSucursal = useMemo(() => getSucursalSesion(), []);
+  const [selectedSucursal, setSelectedSucursal] = useState(() => getSucursalSesion());
+
+  useEffect(() => {
+    function handleStorage() {
+      const id = getSucursalSesion();
+      if (id) setSelectedSucursal(id);
+    }
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedSucursal && sucursales.length > 0) {
+      setSelectedSucursal(String(sucursales[0].id_sucursal));
+    }
+  }, [selectedSucursal, sucursales]);
+
   const [selectedCategoria, setSelectedCategoria] = useState('');
   const [search, setSearch] = useState('');
   const [filtroStock, setFiltroStock] = useState('');
@@ -88,14 +104,6 @@ export default function InventarioPage() {
     motivo: 'Recepción de taller / maquila',
   });
   const [savingMovimiento, setSavingMovimiento] = useState(false);
-
-  const [modalAsignarOpen, setModalAsignarOpen] = useState(false);
-  const [formAsignar, setFormAsignar] = useState({
-    id_producto: '',
-    stock_minimo: 5,
-    stock_inicial: 0,
-  });
-  const [savingAsignar, setSavingAsignar] = useState(false);
 
   useEffect(() => {
     async function loadCatalogs() {
@@ -220,49 +228,6 @@ export default function InventarioPage() {
     }
   };
 
-  const handleOpenAsignar = () => {
-    setFormAsignar({
-      id_producto: '',
-      stock_minimo: 5,
-      stock_inicial: 0,
-    });
-    setError('');
-    setModalAsignarOpen(true);
-  };
-
-  const handleSaveAsignar = async (e) => {
-    e.preventDefault();
-    if (!selectedSucursal) {
-      setError('No se pudo determinar la sucursal de la sesión.');
-      return;
-    }
-    if (!formAsignar.id_producto) {
-      setError('Por favor selecciona una prenda.');
-      return;
-    }
-
-    try {
-      setSavingAsignar(true);
-      setError('');
-      setSuccess('');
-
-      await inventarioApi.create({
-        id_producto: Number(formAsignar.id_producto),
-        id_sucursal: Number(selectedSucursal),
-        stock_minimo: Number(formAsignar.stock_minimo) || 0,
-        stock_inicial: Number(formAsignar.stock_inicial) || 0,
-      });
-
-      setSuccess('Prenda asignada al inventario de la sucursal correctamente.');
-      setModalAsignarOpen(false);
-      fetchInventario();
-    } catch (err) {
-      setError(err.message || 'Error al asignar prenda al inventario.');
-    } finally {
-      setSavingAsignar(false);
-    }
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
@@ -276,21 +241,12 @@ export default function InventarioPage() {
         </div>
         <div className="flex flex-wrap gap-2.5">
           <Button
-            variant="secondary"
+            variant="primary"
             onClick={() => handleOpenMovimiento(inventario[0] || {}, 'entrada')}
             disabled={inventario.length === 0}
             className="text-xs sm:text-sm"
           >
-            <ArrowUpRight className="h-4 w-4 text-forest" />
             Registrar Movimiento
-          </Button>
-          <Button
-            variant="primary"
-            onClick={handleOpenAsignar}
-            className="text-xs sm:text-sm"
-          >
-            <Plus className="h-4 w-4" />
-            Asignar Prenda
           </Button>
         </div>
       </div>
@@ -340,7 +296,7 @@ export default function InventarioPage() {
               <Package className="h-5 w-5 text-forest" />
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted">Prendas Asignadas</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted">Prendas en Sucursal</p>
               <p className="text-2xl font-bold text-ink">
                 {stats.total_productos_asignados ?? 0}
               </p>
@@ -483,18 +439,21 @@ export default function InventarioPage() {
                   <th className="px-6 py-3.5 text-center text-xs font-semibold uppercase tracking-wider text-muted">
                     Stock Actual
                   </th>
+                  <th className="px-6 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-muted">
+                    Acciones
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line bg-white">
                 {loading && inventarioVisible.length === 0 ? (
                   <tr>
-                    <td colSpan="4" className="px-6 py-8 text-center text-sm text-muted">
+                    <td colSpan="5" className="px-6 py-8 text-center text-sm text-muted">
                       Cargando existencias de inventario...
                     </td>
                   </tr>
                 ) : inventarioVisible.length === 0 ? (
                   <tr>
-                    <td colSpan="4" className="px-6 py-8 text-center text-sm text-muted">
+                    <td colSpan="5" className="px-6 py-8 text-center text-sm text-muted">
                       No se encontraron registros de inventario con los filtros aplicados.
                     </td>
                   </tr>
@@ -530,6 +489,28 @@ export default function InventarioPage() {
                           {item.estado_stock === 'agotado' && ' (Agotado)'}
                           {item.estado_stock === 'bajo_stock' && ' (Bajo)'}
                         </span>
+                      </td>
+
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        <div className="inline-flex items-center gap-1.5 justify-end">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenMovimiento(item, 'entrada')}
+                            className="inline-flex items-center gap-1 rounded-lg border border-forest/30 bg-forest/10 px-2.5 py-1 text-xs font-semibold text-forest hover:bg-forest hover:text-white transition"
+                          >
+                            <ArrowUpRight className="h-3.5 w-3.5" />
+                            Entrada
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenMovimiento(item, 'salida')}
+                            disabled={item.stock_actual <= 0}
+                            className="inline-flex items-center gap-1 rounded-lg border border-danger/30 bg-danger/10 px-2.5 py-1 text-xs font-semibold text-danger hover:bg-danger hover:text-white transition disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            <ArrowDownRight className="h-3.5 w-3.5" />
+                            Salida
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -782,103 +763,6 @@ export default function InventarioPage() {
               loading={savingMovimiento}
             >
               Confirmar Movimiento
-            </Button>
-          </div>
-        </form>
-      </Modal>
-
-      <Modal
-        open={modalAsignarOpen}
-        onClose={() => setModalAsignarOpen(false)}
-        title="Asignar Prenda"
-        description="Da de alta un producto del catálogo en el inventario de tu sucursal"
-      >
-        <form onSubmit={handleSaveAsignar} className="space-y-4">
-          {error && <Alert variant="danger">{error}</Alert>}
-
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
-              Prenda del Catálogo *
-            </label>
-            <select
-              value={formAsignar.id_producto}
-              onChange={(e) =>
-                setFormAsignar((prev) => ({ ...prev, id_producto: e.target.value }))
-              }
-              required
-              className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
-            >
-              <option value="">Seleccione una prenda...</option>
-              {productos.map((prod) => (
-                <option key={prod.id_producto} value={prod.id_producto}>
-                  {prod.nombre} ({prod.color} - Talla {prod.talla}) [SKU: {prod.sku || 'N/A'}]
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
-              Sucursal actual
-            </label>
-            <p className="w-full rounded-xl border border-line bg-sand px-3.5 py-2.5 text-sm text-ink">
-              {sucursales.find(
-                (sucursal) =>
-                  String(sucursal.id_sucursal) === selectedSucursal,
-              )?.nombre || 'No disponible'}
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
-                Stock Mínimo (Alerta)
-              </label>
-              <input
-                type="number"
-                min="0"
-                value={formAsignar.stock_minimo}
-                onChange={(e) =>
-                  setFormAsignar((prev) => ({ ...prev, stock_minimo: e.target.value }))
-                }
-                required
-                className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
-              />
-              <p className="mt-1 text-xs text-muted">Avisar si quedan estas piezas o menos</p>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
-                Stock Inicial Físico
-              </label>
-              <input
-                type="number"
-                min="0"
-                value={formAsignar.stock_inicial}
-                onChange={(e) =>
-                  setFormAsignar((prev) => ({ ...prev, stock_inicial: e.target.value }))
-                }
-                required
-                className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-clay focus:ring-1 focus:ring-clay"
-              />
-              <p className="mt-1 text-xs text-muted">Piezas disponibles actualmente en tienda</p>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2.5 pt-4 border-t border-line">
-            <Button
-              variant="secondary"
-              onClick={() => setModalAsignarOpen(false)}
-              disabled={savingAsignar}
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              loading={savingAsignar}
-            >
-              Asignar Prenda
             </Button>
           </div>
         </form>

@@ -28,6 +28,7 @@ const EMPTY_FORM = {
   ciudad: '',
   estado_republica: '',
   codigo_postal: '',
+  es_frecuente: true,
   tiene_credito: false,
   limite_credito: '',
 };
@@ -52,12 +53,13 @@ function formFromCliente(cliente) {
     ciudad: cliente.ciudad ?? '',
     estado_republica: cliente.estado_republica ?? '',
     codigo_postal: cliente.codigo_postal ?? '',
+    es_frecuente: cliente.es_frecuente !== false,
     tiene_credito: Boolean(cliente.tiene_credito),
     limite_credito: cliente.tiene_credito ? String(cliente.limite_credito ?? '') : '',
   };
 }
 
-export function validateForm(form) {
+function validateForm(form) {
   const errors = {};
 
   if (!form.nombre.trim()) {
@@ -141,7 +143,7 @@ export default function ClientesPage() {
     setError('');
 
     try {
-      const response = await clientesApi.list(debouncedSearch);
+      const response = await clientesApi.list(debouncedSearch, { solo_frecuentes: true });
       if (requestId !== requestIdRef.current) return;
       setClientes(response.data);
     } catch (requestError) {
@@ -254,6 +256,7 @@ export default function ClientesPage() {
       ciudad: form.ciudad.trim(),
       estado_republica: form.estado_republica.trim(),
       codigo_postal: form.codigo_postal.trim(),
+      es_frecuente: Boolean(form.es_frecuente),
       tiene_credito: form.tiene_credito,
       limite_credito: form.tiene_credito ? Number(form.limite_credito) : 0,
     };
@@ -695,7 +698,28 @@ export default function ClientesPage() {
           </Field>
 
           <fieldset className="space-y-4 rounded-2xl border border-line p-4">
-            <legend className="px-1 text-sm font-semibold text-ink">Crédito</legend>
+            <legend className="px-1 text-sm font-semibold text-ink">Clasificación y Crédito</legend>
+
+            <label
+              htmlFor="cliente-es-frecuente"
+              className="flex cursor-pointer items-center gap-3 text-sm font-medium text-ink"
+            >
+              <input
+                id="cliente-es-frecuente"
+                data-field="es_frecuente"
+                type="checkbox"
+                checked={form.es_frecuente}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    es_frecuente: event.target.checked,
+                  }))
+                }
+                className="h-4 w-4 rounded border-line text-clay accent-clay focus:ring-clay"
+              />
+              Cliente frecuente
+            </label>
+
             <label
               htmlFor="cliente-tiene-credito"
               className="flex cursor-pointer items-center gap-3 text-sm font-medium text-ink"

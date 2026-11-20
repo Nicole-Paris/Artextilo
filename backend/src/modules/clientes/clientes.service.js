@@ -9,7 +9,11 @@ const BASE_SELECT = `
 `;
 
 function normalizeCliente(row) {
-  return { ...row, tiene_credito: Boolean(row.tiene_credito) };
+  return {
+    ...row,
+    tiene_credito: Boolean(row.tiene_credito),
+    es_frecuente: Boolean(row.es_frecuente),
+  };
 }
 
 async function ensureTelefonoAvailable(telefono, excludeId = null) {
@@ -32,9 +36,13 @@ async function ensureTelefonoAvailable(telefono, excludeId = null) {
   }
 }
 
-export async function listClientes({ search = '' } = {}) {
+export async function listClientes({ search = '', solo_frecuentes = false } = {}) {
   const params = [];
   let sql = `${BASE_SELECT} WHERE deleted_at IS NULL`;
+
+  if (solo_frecuentes) {
+    sql += ' AND es_frecuente = 1';
+  }
 
   if (search) {
     sql += ` AND (
@@ -73,26 +81,43 @@ export async function createCliente(payload) {
     ciudad,
     estado_republica,
     codigo_postal,
+    es_frecuente = true,
     tiene_credito = false,
     limite_credito = 0,
   } = payload;
 
-  await ensureTelefonoAvailable(telefono);
+  const [existing] = await pool.execute(
+    `SELECT id_cliente, es_frecuente FROM cliente WHERE telefono = ? AND deleted_at IS NULL LIMIT 1`,
+    [telefono],
+  );
+
+  if (existing.length > 0) {
+    const existingClient = existing[0];
+    if (es_frecuente && !existingClient.es_frecuente) {
+      await pool.execute(
+        `UPDATE cliente SET es_frecuente = 1 WHERE id_cliente = ?`,
+        [existingClient.id_cliente],
+      );
+    }
+    return getCliente(existingClient.id_cliente);
+  }
+
   const [result] = await pool.execute(
     `INSERT INTO cliente (
        nombre, apellido_paterno, apellido_materno, telefono, correo, direccion,
-       ciudad, estado_republica, codigo_postal, tiene_credito, limite_credito
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ciudad, estado_republica, codigo_postal, es_frecuente, tiene_credito, limite_credito
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       nombre,
       apellido_paterno,
-      apellido_materno,
+      apellido_materno ?? '',
       telefono,
-      correo,
-      direccion,
-      ciudad,
-      estado_republica,
-      codigo_postal,
+      correo ?? null,
+      direccion ?? null,
+      ciudad ?? null,
+      estado_republica ?? null,
+      codigo_postal ?? null,
+      es_frecuente ? 1 : 0,
       tiene_credito ? 1 : 0,
       tiene_credito ? limite_credito : 0,
     ],
@@ -113,6 +138,7 @@ export async function updateCliente(id, payload) {
     ciudad,
     estado_republica,
     codigo_postal,
+    es_frecuente,
     tiene_credito,
     limite_credito,
   } = payload;
@@ -151,12 +177,19 @@ export async function updateCliente(id, payload) {
     creditUpdate = ', tiene_credito = ?, limite_credito = ?';
     params.push(tieneCreditoFinal ? 1 : 0, tieneCreditoFinal ? limiteCreditoFinal : 0);
   }
+
+  let frecuenteUpdate = '';
+  if (es_frecuente !== undefined) {
+    frecuenteUpdate = ', es_frecuente = ?';
+    params.push(es_frecuente ? 1 : 0);
+  }
+
   params.push(id);
 
   await pool.execute(
     `UPDATE cliente
-     SET nombre = ?, apellido_paterno = ?, apellido_materno = ?, telefono = ?,
-         correo = ?, direccion = ?, ciudad = ?, estado_republica = ?, codigo_postal = ?${creditUpdate}
+     SET nombre = ?, apellido_paterno = ?, apellido_materno = COALESCE(?, ''), telefono = ?,
+         correo = ?, direccion = ?, ciudad = ?, estado_republica = ?, codigo_postal = ?${creditUpdate}${frecuenteUpdate}
      WHERE id_cliente = ? AND deleted_at IS NULL`,
     params,
   );

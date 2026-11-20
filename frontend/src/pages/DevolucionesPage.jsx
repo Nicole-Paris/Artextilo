@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { RefreshCw, RotateCcw, Search } from 'lucide-react';
 import { cajaApi } from '../api/caja.js';
 import { devolucionesApi } from '../api/devoluciones.js';
@@ -67,7 +67,8 @@ function DetailRow({ label, children }) {
   );
 }
 
-export default function DevolucionesPage() {
+export default function DevolucionesPage({ embedded = false }) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [devoluciones, setDevoluciones] = useState([]);
   const [empleados, setEmpleados] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -201,6 +202,37 @@ export default function DevolucionesPage() {
   }, [createOpen, selectedPedido]);
 
   useEffect(() => {
+    const pedidoId = searchParams.get('pedido_id');
+    if (!pedidoId) return undefined;
+
+    let active = true;
+    pedidosApi
+      .get(pedidoId)
+      .then((response) => {
+        if (!active || !response.data) return;
+        const ped = response.data;
+        const empleadoInicial = empleados[0]
+          ? String(empleados[0].id_empleado)
+          : '';
+        setForm((prev) => ({
+          ...prev,
+          id_empleado_autoriza: prev.id_empleado_autoriza || empleadoInicial,
+          id_empleado_procesa: prev.id_empleado_procesa || empleadoInicial,
+        }));
+        setSelectedPedido(ped);
+        setPedidoSearch(ped.folio || `P-${String(ped.id_pedido).padStart(4, '0')}`);
+        setCreateOpen(true);
+      })
+      .catch((err) => {
+        console.error('Error al cargar pedido para devolución:', err);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [searchParams, empleados]);
+
+  useEffect(() => {
     if (!createOpen || form.metodo !== 'efectivo' || !form.id_empleado_procesa) {
       setCajaAbierta(null);
       setCheckingCaja(false);
@@ -284,6 +316,12 @@ export default function DevolucionesPage() {
     if (saving) return;
     setCreateOpen(false);
     resetForm();
+    if (searchParams.get('pedido_id')) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('pedido_id');
+      next.delete('folio');
+      setSearchParams(next, { replace: true });
+    }
   }
 
   function seleccionarPedido(pedido) {
@@ -319,6 +357,12 @@ export default function DevolucionesPage() {
       });
       setCreateOpen(false);
       resetForm();
+      if (searchParams.get('pedido_id')) {
+        const next = new URLSearchParams(searchParams);
+        next.delete('pedido_id');
+        next.delete('folio');
+        setSearchParams(next, { replace: true });
+      }
       setSuccess('Devolución registrada correctamente.');
       await loadDevoluciones();
     } catch (requestError) {
@@ -351,15 +395,28 @@ export default function DevolucionesPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Devoluciones"
-        description="Consulta y registra devoluciones asociadas a los pedidos."
-      >
-        <Button onClick={abrirRegistro}>
-          <RotateCcw className="h-4 w-4" aria-hidden="true" />
-          Registrar devolución
-        </Button>
-      </PageHeader>
+      {!embedded ? (
+        <PageHeader
+          title="Devoluciones"
+          description="Consulta y registra devoluciones asociadas a los pedidos."
+        >
+          <Button onClick={abrirRegistro}>
+            <RotateCcw className="h-4 w-4" aria-hidden="true" />
+            Registrar devolución
+          </Button>
+        </PageHeader>
+      ) : (
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center mb-6">
+          <div>
+            <h2 className="font-display text-2xl font-bold text-ink">Devoluciones de Pedidos</h2>
+            <p className="text-sm text-muted">Consulta y registra devoluciones de dinero asociadas a los pedidos.</p>
+          </div>
+          <Button onClick={abrirRegistro}>
+            <RotateCcw className="h-4 w-4" aria-hidden="true" />
+            Registrar devolución
+          </Button>
+        </div>
+      )}
 
       {error && (
         <div className="mb-5">

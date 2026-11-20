@@ -27,14 +27,14 @@ export default function App() {
         <Route element={<Layout />}>
           <Route index element={<Dashboard />} />
           <Route path="clientes" element={<ClientesPage />} />
-          <Route path="empleados" element={<EmpleadosPage />} />
+          <Route path="empleados" element={<Navigate to="/sucursales" replace />} />
           <Route path="sucursales" element={<SucursalesPage />} />
-          <Route path="categorias" element={<CategoriaPage />} />
+          <Route path="categorias" element={<Navigate to="/productos?tab=categorias" replace />} />
           <Route path="productos" element={<ProductosPage />} />
           <Route path="inventario" element={<InventarioPage />} />
           <Route path="caja" element={<CajaPage />} />
           <Route path="pedidos" element={<PedidosPage />} />
-          <Route path="devoluciones" element={<DevolucionesPage />} />
+          <Route path="devoluciones" element={<Navigate to="/pedidos?tab=devoluciones" replace />} />
           <Route path="global-values" element={<GlobalValuesPage />} />
           <Route path="*" element={<NotFound />} />
         </Route>

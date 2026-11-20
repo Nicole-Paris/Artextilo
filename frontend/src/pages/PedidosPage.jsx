@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   CheckCircle2,
   CircleDollarSign,
   Plus,
   Receipt,
   RefreshCw,
+  RotateCcw,
   Search,
   ShoppingBag,
   Wallet,
+  UserPlus,
+  User,
+  Package,
 } from 'lucide-react';
+import DevolucionesPage from './DevolucionesPage.jsx';
 import Alert from '../components/Alert.jsx';
 import Button from '../components/Button.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -174,7 +179,14 @@ function TotalsPanel({ totals }) {
           <dd className="font-semibold text-ink">{formatMoney(totals.subtotalServicios)}</dd>
         </div>
         <div className="flex items-center justify-between gap-3">
-          <dt className="text-muted">Descuento</dt>
+          <dt className="text-muted">
+            Descuento{' '}
+            {totals.descuentoTipo === 'mayoreo'
+              ? '(Mayoreo 10%)'
+              : totals.descuentoTipo === 'manual'
+                ? '(Personalizado)'
+                : ''}
+          </dt>
           <dd className="font-semibold text-danger">-{formatMoney(totals.descuento)}</dd>
         </div>
         <div className="flex items-center justify-between gap-3">
@@ -201,6 +213,19 @@ function TotalsPanel({ totals }) {
 }
 
 export default function PedidosPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') === 'devoluciones' ? 'devoluciones' : 'pedidos';
+
+  const setTab = (tab) => {
+    const next = new URLSearchParams(searchParams);
+    if (tab === 'devoluciones') {
+      next.set('tab', 'devoluciones');
+    } else {
+      next.delete('tab');
+    }
+    setSearchParams(next, { replace: true });
+  };
+
   const [pedidos, setPedidos] = useState([]);
   const [stats, setStats] = useState({
     total: 0,
@@ -233,6 +258,26 @@ export default function PedidosPage() {
   const [cajaAbierta, setCajaAbierta] = useState(null);
   const [checkingCaja, setCheckingCaja] = useState(false);
   const [createPagoTouched, setCreatePagoTouched] = useState({});
+  const [aplicarDescuentoManual, setAplicarDescuentoManual] = useState(false);
+
+  // Búsqueda y selección interactiva de cliente
+  const [clienteSearchOpen, setClienteSearchOpen] = useState(false);
+
+  // Búsqueda interactiva de productos por fila
+  const [activeProductoDropdown, setActiveProductoDropdown] = useState(null);
+
+  // Registro rápido de cliente desde nuevo pedido
+  const [quickClienteModalOpen, setQuickClienteModalOpen] = useState(false);
+  const [quickClienteForm, setQuickClienteForm] = useState({
+    nombre: '',
+    apellido_paterno: '',
+    telefono: '',
+    direccion: '',
+    correo: '',
+    es_frecuente: false,
+  });
+  const [quickClienteLoading, setQuickClienteLoading] = useState(false);
+  const [quickClienteError, setQuickClienteError] = useState('');
 
   const [detailTarget, setDetailTarget] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -270,8 +315,20 @@ export default function PedidosPage() {
   const [savingCancel, setSavingCancel] = useState(false);
 
   const resolveDefaultContext = useCallback(() => {
-    const empleado = empleados.find((item) => isCashier(item)) ?? empleados[0];
-    const idEmpleado = empleado ? String(empleado.id_empleado) : '';
+    let sessionEmpleado = null;
+    try {
+      const raw = localStorage.getItem('artextilo_empleado');
+      if (raw) sessionEmpleado = JSON.parse(raw);
+    } catch {}
+
+    const empleado =
+      (sessionEmpleado?.id_empleado &&
+        empleados.find((item) => Number(item.id_empleado) === Number(sessionEmpleado.id_empleado))) ||
+      sessionEmpleado ||
+      empleados.find((item) => isCashier(item)) ||
+      empleados[0];
+
+    const idEmpleado = empleado?.id_empleado ? String(empleado.id_empleado) : '';
     const idSucursal = empleado?.id_sucursal
       ? String(empleado.id_sucursal)
       : sucursales[0]?.id_sucursal
@@ -329,12 +386,25 @@ export default function PedidosPage() {
         productosDisponibles.find((item) => {
           const etiqueta = formatProductoOption(item).toLowerCase();
           const nombre = String(item.producto_nombre || '').toLowerCase();
-          return etiqueta === normalized || nombre === normalized;
+          const sku = String(item.producto_sku || '').toLowerCase();
+          return etiqueta === normalized || nombre === normalized || (sku && sku === normalized);
         }) ?? null
       );
     },
     [productosDisponibles],
   );
+
+  const clientesFiltrados = useMemo(() => {
+    const q = (createForm.cliente_texto || '').trim().toLowerCase();
+    if (!q) return clientes.slice(0, 8);
+    return clientes
+      .filter((c) => {
+        const full = `${c.nombre || ''} ${c.apellido_paterno || ''} ${c.apellido_materno || ''}`.toLowerCase();
+        const tel = String(c.telefono || '').toLowerCase();
+        return full.includes(q) || tel.includes(q);
+      })
+      .slice(0, 8);
+  }, [clientes, createForm.cliente_texto]);
 
   const loadPedidos = useCallback(async () => {
     setLoading(true);
@@ -503,18 +573,19 @@ export default function PedidosPage() {
 
   const totals = useMemo(() => {
     const productosDetalle = createForm.productos.map((row) => {
-      const matchedItem =
-        productosDisponibles.find(
-          (inventarioItem) =>
-            String(inventarioItem.id_producto) === String(row.id_producto),
-        ) ?? matchProductoFromText(row.producto_texto || '');
+      // Únicamente vincular producto si el usuario lo seleccionó explícitamente por id_producto
+      const matchedItem = row.id_producto
+        ? productosDisponibles.find(
+            (inventarioItem) =>
+              String(inventarioItem.id_producto) === String(row.id_producto),
+          ) ?? null
+        : null;
 
       const precio = Number(matchedItem?.producto_precio || 0);
       const cantidad = Number(row.cantidad || 0);
 
       return {
         ...row,
-        id_producto: matchedItem ? String(matchedItem.id_producto) : row.id_producto,
         item: matchedItem,
         precio,
         subtotal: precio * cantidad,
@@ -536,13 +607,20 @@ export default function PedidosPage() {
     );
     const subtotal = subtotalProductos + subtotalServicios;
 
+    const esMayoreo = totalPiezas >= MAYOREO_MINIMO;
+    const descuentoMayoreo = esMayoreo
+      ? Math.round((subtotal * MAYOREO_PORCENTAJE) / 100)
+      : 0;
+
     let descuento = 0;
-    if (createForm.descuento_tipo === 'mayoreo') {
-      if (totalPiezas >= MAYOREO_MINIMO) {
-        descuento = Math.round((subtotal * MAYOREO_PORCENTAJE) / 100);
-      }
-    } else if (createForm.descuento_tipo === 'manual') {
-      descuento = Number(createForm.descuento_monto || 0);
+    let descuentoTipo = 'ninguno';
+
+    if (aplicarDescuentoManual) {
+      descuentoTipo = 'manual';
+      descuento = Math.min(Number(createForm.descuento_monto || 0), subtotal);
+    } else if (esMayoreo) {
+      descuentoTipo = 'mayoreo';
+      descuento = descuentoMayoreo;
     }
 
     descuento = Math.min(descuento, subtotal);
@@ -561,6 +639,9 @@ export default function PedidosPage() {
       subtotalServicios,
       subtotal,
       totalPiezas,
+      esMayoreo,
+      descuentoMayoreo,
+      descuentoTipo,
       descuento,
       costoEnvio,
       total,
@@ -568,7 +649,17 @@ export default function PedidosPage() {
       montoInicial,
       saldoDespues: Math.max(total - montoInicial, 0),
     };
-  }, [createForm.productos, createForm.servicios, createForm.descuento_tipo, createForm.descuento_monto, createForm.forma_entrega, createForm.costo_envio, createForm.pago_inicial.monto, productosDisponibles, matchProductoFromText]);
+  }, [
+    createForm.productos,
+    createForm.servicios,
+    createForm.descuento_monto,
+    createForm.forma_entrega,
+    createForm.costo_envio,
+    createForm.pago_inicial.monto,
+    aplicarDescuentoManual,
+    productosDisponibles,
+    matchProductoFromText,
+  ]);
 
   const effectiveEmpleadoId =
     createForm.pago_inicial.id_empleado ||
@@ -626,9 +717,22 @@ export default function PedidosPage() {
         id_empleado: idEmpleado,
       },
     });
+    setAplicarDescuentoManual(false);
     setCreateError('');
     setCreatePagoTouched({});
     setCreateOpen(true);
+  }
+
+  function handleToggleDescuentoManual(activo) {
+    setAplicarDescuentoManual(activo);
+    if (!activo) {
+      setCreateForm((current) => ({
+        ...current,
+        descuento_monto: 0,
+        descuento_motivo: '',
+        id_descuento_autoriza: '',
+      }));
+    }
   }
 
   function handleFormChange(field, value) {
@@ -657,6 +761,69 @@ export default function PedidosPage() {
       cliente_texto: value,
       id_cliente: matched ? String(matched.id_cliente) : '',
     }));
+  }
+
+  function seleccionarCliente(cliente) {
+    setCreateForm((current) => ({
+      ...current,
+      id_cliente: String(cliente.id_cliente),
+      cliente_texto: formatClienteOption(cliente),
+    }));
+    setClienteSearchOpen(false);
+  }
+
+  function abrirRegistroRapidoCliente() {
+    setQuickClienteForm({
+      nombre: createForm.cliente_texto?.split(' ')[0] || '',
+      apellido_paterno: '',
+      telefono: '',
+      direccion: 'Venta mostrador / Sin dirección',
+      correo: '',
+      es_frecuente: false,
+    });
+    setQuickClienteError('');
+    setQuickClienteModalOpen(true);
+  }
+
+  async function handleGuardarClienteRapido(e) {
+    e.preventDefault();
+    setQuickClienteError('');
+
+    if (!quickClienteForm.nombre.trim()) {
+      setQuickClienteError('El nombre es obligatorio');
+      return;
+    }
+    if (!quickClienteForm.apellido_paterno.trim()) {
+      setQuickClienteError('El apellido paterno es obligatorio');
+      return;
+    }
+    if (!quickClienteForm.telefono.trim() || !/^\d{10,15}$/.test(quickClienteForm.telefono.trim())) {
+      setQuickClienteError('El teléfono debe tener entre 10 y 15 dígitos numéricos');
+      return;
+    }
+
+    setQuickClienteLoading(true);
+    try {
+      const resp = await clientesApi.create({
+        nombre: quickClienteForm.nombre.trim(),
+        apellido_paterno: quickClienteForm.apellido_paterno.trim(),
+        telefono: quickClienteForm.telefono.trim(),
+        direccion: quickClienteForm.direccion.trim() || 'Sin dirección',
+        correo: quickClienteForm.correo.trim() || null,
+        es_frecuente: Boolean(quickClienteForm.es_frecuente),
+        tiene_credito: false,
+        limite_credito: 0,
+      });
+
+      const nuevo = resp.data;
+      setClientes((prev) => [nuevo, ...prev]);
+      seleccionarCliente(nuevo);
+      setQuickClienteModalOpen(false);
+    } catch (err) {
+      setQuickClienteError(err.message || 'Error al registrar el cliente');
+    } finally {
+      setQuickClienteLoading(false);
+    }
   }
 
   function handlePagoInicialChange(field, value) {
@@ -698,14 +865,27 @@ export default function PedidosPage() {
   }
 
   function handleProductoTextoChange(index, value) {
-    const matched = matchProductoFromText(value);
-    const duplicate =
-      matched &&
-      createForm.productos.some(
-        (item, itemIndex) =>
-          itemIndex !== index &&
-          String(item.id_producto || '') === String(matched.id_producto),
-      );
+    setCreateError('');
+    // Al escribir, solo actualizamos el texto de búsqueda y limpiamos id_producto
+    // El producto solo se asignará cuando el usuario haga clic en una opción de la lista
+    setCreateForm((current) => ({
+      ...current,
+      productos: current.productos.map((item, itemIndex) =>
+        itemIndex === index
+          ? {
+              ...item,
+              producto_texto: value,
+              id_producto: '',
+            }
+          : item,
+      ),
+    }));
+  }
+
+  function seleccionarProducto(index, item) {
+    const duplicate = createForm.productos.some(
+      (p, i) => i !== index && String(p.id_producto || '') === String(item.id_producto),
+    );
 
     if (duplicate) {
       setCreateError('Ese producto ya está agregado en el pedido.');
@@ -715,16 +895,37 @@ export default function PedidosPage() {
     setCreateError('');
     setCreateForm((current) => ({
       ...current,
-      productos: current.productos.map((item, itemIndex) =>
-        itemIndex === index
+      productos: current.productos.map((row, i) =>
+        i === index
           ? {
-              ...item,
-              producto_texto: value,
-              id_producto: matched ? String(matched.id_producto) : '',
+              ...row,
+              id_producto: String(item.id_producto),
+              producto_texto: formatProductoOption(item),
             }
-          : item,
+          : row,
       ),
     }));
+    setActiveProductoDropdown(null);
+  }
+
+  function getProductosFiltrados(texto) {
+    const q = (texto || '').trim().toLowerCase();
+    if (!q) return productosDisponibles.slice(0, 10);
+    return productosDisponibles
+      .filter((item) => {
+        const nom = String(item.producto_nombre || '').toLowerCase();
+        const sku = String(item.producto_sku || '').toLowerCase();
+        const col = String(item.producto_color || '').toLowerCase();
+        const tal = String(item.producto_talla || '').toLowerCase();
+        return (
+          nom.includes(q) ||
+          (sku && sku.includes(q)) ||
+          col.includes(q) ||
+          tal.includes(q) ||
+          `${nom} ${col} ${tal}`.includes(q)
+        );
+      })
+      .slice(0, 10);
   }
 
   function handleCantidadChange(index, value) {
@@ -837,17 +1038,20 @@ export default function PedidosPage() {
       return;
     }
 
-    if (
-      createForm.descuento_tipo === 'manual' &&
-      (!createForm.id_descuento_autoriza || !createForm.descuento_motivo.trim())
-    ) {
-      setCreateError('El descuento manual requiere monto, motivo y empleado que autoriza.');
-      return;
-    }
-
-    if (createForm.descuento_tipo === 'manual' && Number(createForm.descuento_monto) > totals.subtotal) {
-      setCreateError('El descuento no puede exceder el subtotal.');
-      return;
+    if (aplicarDescuentoManual) {
+      const montoDesc = Number(createForm.descuento_monto || 0);
+      if (montoDesc <= 0) {
+        setCreateError('Ingresa un monto de descuento válido mayor a cero.');
+        return;
+      }
+      if (montoDesc > totals.subtotal) {
+        setCreateError('El monto de descuento no puede exceder el subtotal del pedido.');
+        return;
+      }
+      if (!createForm.descuento_motivo.trim()) {
+        setCreateError('El descuento manual requiere un motivo explicativo.');
+        return;
+      }
     }
 
     let pagoInicial = null;
@@ -897,18 +1101,20 @@ export default function PedidosPage() {
         fecha_entrega_prometida: createForm.fecha_entrega_prometida
           ? createForm.fecha_entrega_prometida.replace('T', ' ')
           : null,
-        descuento_tipo: createForm.descuento_tipo,
+        descuento_tipo: totals.descuentoTipo,
         descuento_monto:
-          createForm.descuento_tipo === 'manual'
+          totals.descuentoTipo === 'manual'
             ? Number(createForm.descuento_monto) || 0
-            : 0,
+            : totals.descuentoTipo === 'mayoreo'
+              ? totals.descuentoMayoreo
+              : 0,
         descuento_motivo:
-          createForm.descuento_tipo === 'manual'
+          totals.descuentoTipo === 'manual'
             ? createForm.descuento_motivo.trim()
             : null,
         id_descuento_autoriza:
-          createForm.descuento_tipo === 'manual'
-            ? Number(createForm.id_descuento_autoriza)
+          totals.descuentoTipo === 'manual'
+            ? Number(idEmpleadoFinal)
             : null,
         observaciones: createForm.observaciones.trim() || null,
         productos: totals.productosDetalle.map((row) => ({
@@ -1143,10 +1349,56 @@ export default function PedidosPage() {
     !['cancelado', 'entregado'].includes(pedido.estado);
   const puedeCancelar = (pedido) =>
     !['cancelado', 'entregado'].includes(pedido.estado);
+  const puedeDevolver = (pedido) => pedido.estado !== 'cancelado';
+
+  const abrirDevolucion = (pedido) => {
+    cerrarDetalle();
+    setSearchParams({
+      tab: 'devoluciones',
+      pedido_id: String(pedido.id_pedido),
+      folio: pedido.folio || '',
+    });
+  };
 
   return (
     <div>
-      <PageHeader
+      {/* Selector de pestañas */}
+      <div className="flex border-b border-line gap-2 mb-6">
+        <button
+          type="button"
+          onClick={() => setTab('pedidos')}
+          className={cn(
+            'flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-semibold transition',
+            activeTab === 'pedidos'
+              ? 'border-forest text-forest'
+              : 'border-transparent text-muted hover:text-ink',
+          )}
+        >
+          <Receipt className="h-4 w-4" />
+          <span>Pedidos y Ventas</span>
+          <span className="rounded-full bg-sand px-2 py-0.5 text-xs text-muted">
+            {pedidos.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setTab('devoluciones')}
+          className={cn(
+            'flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-semibold transition',
+            activeTab === 'devoluciones'
+              ? 'border-forest text-forest'
+              : 'border-transparent text-muted hover:text-ink',
+          )}
+        >
+          <RotateCcw className="h-4 w-4" />
+          <span>Devoluciones</span>
+        </button>
+      </div>
+
+      {activeTab === 'pedidos' ? (
+        <>
+          <PageHeader
         title="Pedidos"
         description="Registra ventas, apartados y servicios de bordado; controla pagos, entregas y cancelaciones."
       >
@@ -1292,7 +1544,7 @@ export default function PedidosPage() {
                     <th className="px-4 py-3 font-semibold">Pago</th>
                     <th className="px-4 py-3 text-right font-semibold">Total</th>
                     <th className="px-4 py-3 text-right font-semibold">Saldo</th>
-                    <th className="px-4 py-3 text-right font-semibold">Acciones</th>
+                    <th className="px-4 py-3 text-right font-semibold min-w-[280px]">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -1334,8 +1586,8 @@ export default function PedidosPage() {
                           {formatMoney(pedido.saldo_pendiente)}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap justify-end gap-1.5">
+                      <td className="px-4 py-3 whitespace-nowrap text-right">
+                        <div className="inline-flex items-center justify-end gap-1.5">
                           <Button
                             variant="ghost"
                             size="sm"
@@ -1350,7 +1602,7 @@ export default function PedidosPage() {
                               className="whitespace-nowrap"
                               onClick={() => abrirPago(pedido)}
                             >
-                              Registrar pago
+                              Pago
                             </Button>
                           )}
                           {puedeCambiarEstado(pedido) && (
@@ -1360,6 +1612,18 @@ export default function PedidosPage() {
                               onClick={() => abrirEstado(pedido)}
                             >
                               Estado
+                            </Button>
+                          )}
+                          {puedeDevolver(pedido) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-amber-700 hover:bg-amber-50"
+                              onClick={() => abrirDevolucion(pedido)}
+                              title="Registrar devolución"
+                            >
+                              <RotateCcw className="mr-1 h-3.5 w-3.5" />
+                              Devolución
                             </Button>
                           )}
                           {puedeCancelar(pedido) && (
@@ -1413,18 +1677,29 @@ export default function PedidosPage() {
                       </dd>
                     </div>
                   </dl>
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <div className="mt-3 flex flex-wrap items-center gap-2 pt-2 border-t border-line/60">
                     <Button variant="secondary" size="sm" onClick={() => abrirDetalle(pedido)}>
-                      Ver detalle
+                      Ver
                     </Button>
                     {puedeCobrar(pedido) && (
                       <Button size="sm" onClick={() => abrirPago(pedido)}>
-                        Registrar pago
+                        Pago
                       </Button>
                     )}
                     {puedeCambiarEstado(pedido) && (
                       <Button variant="secondary" size="sm" onClick={() => abrirEstado(pedido)}>
                         Estado
+                      </Button>
+                    )}
+                    {puedeDevolver(pedido) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-amber-700 hover:bg-amber-50"
+                        onClick={() => abrirDevolucion(pedido)}
+                      >
+                        <RotateCcw className="mr-1 h-3.5 w-3.5" />
+                        Devolución
                       </Button>
                     )}
                     {puedeCancelar(pedido) && (
@@ -1483,8 +1758,8 @@ export default function PedidosPage() {
               <p className="font-semibold">No hay empleados activos.</p>
               <p className="mt-1">
                 Registra un empleado en{' '}
-                <Link to="/empleados?nuevo=1" className="font-semibold underline">
-                  Empleados
+                <Link to="/sucursales" className="font-semibold underline">
+                  Sucursales
                 </Link>{' '}
                 antes de crear un pedido.
               </p>
@@ -1506,23 +1781,82 @@ export default function PedidosPage() {
           <section className="space-y-4">
             <h3 className="font-display text-lg font-semibold text-ink">Cliente y origen</h3>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field
-                label="Cliente"
-                htmlFor="pedido-cliente"
-                hint="Escribe nombre o teléfono del cliente."
-              >
-                <input
-                  id="pedido-cliente"
-                  type="text"
-                  list="lista-clientes-sugeridos"
-                  maxLength={150}
-                  className={inputClass()}
-                  value={createForm.cliente_texto}
-                  onChange={(event) => handleClienteTextoChange(event.target.value)}
-                  placeholder="Ej. María López · 9221234567"
-                  required
-                />
-              </Field>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="pedido-cliente" className="block text-sm font-semibold text-ink">
+                    Cliente <span className="text-danger">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={abrirRegistroRapidoCliente}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-forest hover:underline"
+                  >
+                    <UserPlus className="h-3.5 w-3.5" />
+                    + Registrar nuevo cliente
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <input
+                    id="pedido-cliente"
+                    type="text"
+                    list="lista-clientes-sugeridos"
+                    maxLength={150}
+                    className={cn(inputClass(), 'pr-8')}
+                    value={createForm.cliente_texto}
+                    onChange={(event) => {
+                      handleClienteTextoChange(event.target.value);
+                      setClienteSearchOpen(true);
+                    }}
+                    onFocus={() => setClienteSearchOpen(true)}
+                    placeholder="Escribe nombre o teléfono…"
+                    required
+                    autoComplete="off"
+                  />
+                  {createForm.id_cliente ? (
+                    <div className="absolute right-2.5 top-1/2 -translate-y-1/2 text-forest text-xs font-bold bg-sage px-1.5 py-0.5 rounded">
+                      ✓ Seleccionado
+                    </div>
+                  ) : null}
+                </div>
+
+                {clienteSearchOpen && createForm.cliente_texto && !createForm.id_cliente && (
+                  <div className="relative z-20">
+                    <div className="absolute left-0 right-0 top-1 max-h-48 overflow-y-auto rounded-xl border border-line bg-paper p-1 shadow-soft">
+                      {clientesFiltrados.length > 0 ? (
+                        clientesFiltrados.map((c) => (
+                          <button
+                            key={c.id_cliente}
+                            type="button"
+                            onClick={() => seleccionarCliente(c)}
+                            className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs hover:bg-sand transition"
+                          >
+                            <div>
+                              <p className="font-semibold text-ink">
+                                {[c.nombre, c.apellido_paterno, c.apellido_materno].filter(Boolean).join(' ')}
+                              </p>
+                              {c.direccion && <p className="text-[11px] text-muted truncate max-w-xs">{c.direccion}</p>}
+                            </div>
+                            <span className="text-muted font-mono shrink-0">{c.telefono}</span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="p-2 text-center text-xs text-muted">
+                          No se encontró este cliente.{' '}
+                          <button
+                            type="button"
+                            onClick={abrirRegistroRapidoCliente}
+                            className="font-bold text-forest underline ml-1"
+                          >
+                            Crear aquí
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                <p className="text-xs text-muted">Escribe para autocompletar o selecciona de la lista.</p>
+              </div>
 
               <Field label="Origen" htmlFor="pedido-origen">
                 <select
@@ -1657,29 +1991,84 @@ export default function PedidosPage() {
                     key={index}
                     className="grid gap-2 rounded-xl border border-line p-3 sm:grid-cols-[1fr_7rem_7rem_auto] sm:items-end"
                   >
-                    <Field
-                      label="Producto"
-                      htmlFor={`producto-${index}`}
-                      hint={
-                        row.item
-                          ? `Stock disponible: ${row.item.stock_actual}`
-                          : row.producto_texto
-                            ? 'Producto no encontrado o sin stock'
-                            : 'Escribe nombre, color o talla'
-                      }
-                    >
-                      <input
-                        id={`producto-${index}`}
-                        type="text"
-                        list="lista-productos-sugeridos"
-                        className={inputClass()}
-                        value={row.producto_texto ?? ''}
-                        onChange={(event) =>
-                          handleProductoTextoChange(index, event.target.value)
-                        }
-                        placeholder="Escribe el producto…"
-                      />
-                    </Field>
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label htmlFor={`producto-${index}`} className="block text-sm font-semibold text-ink">
+                          Producto <span className="text-danger">*</span>
+                        </label>
+                        {row.item && (
+                          <span className="text-xs font-semibold text-forest">
+                            Stock: {row.item.stock_actual}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="relative">
+                        <input
+                          id={`producto-${index}`}
+                          type="text"
+                          className={cn(inputClass(), 'pr-8')}
+                          value={row.producto_texto ?? ''}
+                          onChange={(event) => {
+                            handleProductoTextoChange(index, event.target.value);
+                            setActiveProductoDropdown(index);
+                          }}
+                          onFocus={() => setActiveProductoDropdown(index)}
+                          placeholder="Escribe nombre o SKU…"
+                          autoComplete="off"
+                        />
+                        {row.id_producto ? (
+                          <div className="absolute right-2.5 top-1/2 -translate-y-1/2 text-forest text-xs font-bold bg-sage px-1.5 py-0.5 rounded">
+                            ✓
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {activeProductoDropdown === index && !row.id_producto && (
+                        <div className="relative z-30">
+                          <div className="absolute left-0 right-0 top-1 max-h-56 overflow-y-auto rounded-xl border border-line bg-paper p-1 shadow-soft">
+                            {getProductosFiltrados(row.producto_texto).length > 0 ? (
+                              getProductosFiltrados(row.producto_texto).map((item) => (
+                                <button
+                                  key={item.id_inventario}
+                                  type="button"
+                                  onClick={() => seleccionarProducto(index, item)}
+                                  className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs hover:bg-sand transition"
+                                >
+                                  <div>
+                                    <p className="font-semibold text-ink">
+                                      {item.producto_nombre}
+                                    </p>
+                                    <p className="text-[11px] text-muted">
+                                      {[item.producto_color, item.producto_talla].filter(Boolean).join(' · ')}
+                                      {item.producto_sku ? ` · SKU: ${item.producto_sku}` : ''}
+                                    </p>
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <span className="font-semibold text-ink block">
+                                      {formatMoney(item.producto_precio)}
+                                    </span>
+                                    <span className="text-[11px] text-forest">
+                                      {item.stock_actual} disp.
+                                    </span>
+                                  </div>
+                                </button>
+                              ))
+                            ) : (
+                              <div className="p-3 text-center text-xs text-muted">
+                                No se encontraron productos con existencia en esta sucursal.
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      <p className="text-xs text-muted">
+                        {row.item
+                          ? `Precio: ${formatMoney(row.item.producto_precio)} c/u`
+                          : 'Escribe para autocompletar o selecciona de la lista.'}
+                      </p>
+                    </div>
 
                     <Field label="Cantidad" htmlFor={`cantidad-${index}`}>
                       <input
@@ -1817,38 +2206,74 @@ export default function PedidosPage() {
 
           <section className="space-y-4">
             <h3 className="font-display text-lg font-semibold text-ink">Descuento</h3>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Tipo de descuento" htmlFor="pedido-descuento-tipo">
-                <select
-                  id="pedido-descuento-tipo"
-                  className={inputClass()}
-                  value={createForm.descuento_tipo}
-                  onChange={(event) =>
-                    handleFormChange('descuento_tipo', event.target.value)
-                  }
-                >
-                  <option value="ninguno">Sin descuento</option>
-                  <option value="mayoreo">Mayoreo automático</option>
-                  <option value="manual">Manual autorizado</option>
-                </select>
-              </Field>
 
-              {createForm.descuento_tipo === 'mayoreo' && (
-                <div className="rounded-xl bg-sand/70 px-4 py-3 text-sm text-muted">
-                  Se aplica {MAYOREO_PORCENTAJE}% cuando el pedido tiene {MAYOREO_MINIMO} piezas o más.
-                  Piezas actuales: <strong className="text-ink">{totals.totalPiezas}</strong>.
-                </div>
+            {/* Banner informativo de mayoreo automático */}
+            <div
+              className={cn(
+                'rounded-xl border p-3.5 text-sm transition-colors flex items-start gap-3',
+                totals.esMayoreo
+                  ? 'border-emerald-200 bg-emerald-50/80 text-emerald-900'
+                  : 'border-border/60 bg-sand/40 text-muted',
               )}
+            >
+              <div className="pt-0.5 text-base">
+                {totals.esMayoreo ? '🏷️' : 'ℹ️'}
+              </div>
+              <div className="flex-1 space-y-0.5">
+                <p className="font-medium">
+                  {totals.esMayoreo
+                    ? `¡Descuento de mayoreo (${MAYOREO_PORCENTAJE}%) aplicado automáticamente!`
+                    : `Descuento por mayoreo (${MAYOREO_PORCENTAJE}% a partir de ${MAYOREO_MINIMO} piezas)`}
+                </p>
+                <p className="text-xs">
+                  {totals.esMayoreo ? (
+                    <>
+                      Se detectaron <strong>{totals.totalPiezas} piezas</strong> en prendas.
+                      Ahorro aplicado: <strong>-{formatMoney(totals.descuentoMayoreo)}</strong>.
+                      {aplicarDescuentoManual && (
+                        <span className="block mt-1 font-semibold text-amber-800">
+                          (Sustituido por el descuento manual personalizado indicado abajo)
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      Prendas agregadas al pedido: <strong>{totals.totalPiezas}</strong> de{' '}
+                      <strong>{MAYOREO_MINIMO} piezas</strong> mínimas requeridas.
+                    </>
+                  )}
+                </p>
+              </div>
+            </div>
 
-              {createForm.descuento_tipo === 'manual' && (
-                <>
-                  <Field label="Monto del descuento" htmlFor="pedido-descuento-monto">
+            {/* Apartado ¿Aplicar descuento? */}
+            <div className="rounded-xl border border-border p-4 space-y-4 bg-surface shadow-xs">
+              <label className="flex items-center gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  id="pedido-aplicar-descuento-toggle"
+                  className="h-4 w-4 rounded border-border text-charcoal focus:ring-charcoal"
+                  checked={aplicarDescuentoManual}
+                  onChange={(e) => handleToggleDescuentoManual(e.target.checked)}
+                />
+                <div>
+                  <span className="font-medium text-ink">¿Aplicar descuento?</span>
+                  <p className="text-xs text-muted">
+                    Activa esta casilla para ingresar un monto de descuento especial autorizado.
+                  </p>
+                </div>
+              </label>
+
+              {aplicarDescuentoManual && (
+                <div className="pt-3 border-t border-border grid gap-4 sm:grid-cols-2">
+                  <Field label="Monto a descontar ($)" htmlFor="pedido-descuento-monto">
                     <input
                       id="pedido-descuento-monto"
                       type="number"
                       min="0"
                       step="1"
                       className={inputClass()}
+                      placeholder="0.00"
                       value={createForm.descuento_monto}
                       onChange={(event) =>
                         handleFormChange('descuento_monto', event.target.value)
@@ -1856,7 +2281,7 @@ export default function PedidosPage() {
                     />
                   </Field>
 
-                  <Field label="Motivo" htmlFor="pedido-descuento-motivo">
+                  <Field label="Motivo del descuento" htmlFor="pedido-descuento-motivo">
                     <input
                       id="pedido-descuento-motivo"
                       type="text"
@@ -1866,28 +2291,10 @@ export default function PedidosPage() {
                       onChange={(event) =>
                         handleFormChange('descuento_motivo', event.target.value)
                       }
-                      placeholder="Autorizado por la administradora"
+                      placeholder="Ej. Descuento cliente frecuente, promoción especial, etc."
                     />
                   </Field>
-
-                  <Field label="Empleado que autoriza" htmlFor="pedido-descuento-autoriza">
-                    <select
-                      id="pedido-descuento-autoriza"
-                      className={inputClass()}
-                      value={createForm.id_descuento_autoriza}
-                      onChange={(event) =>
-                        handleFormChange('id_descuento_autoriza', event.target.value)
-                      }
-                    >
-                      <option value="">Selecciona quién autoriza</option>
-                      {empleados.map((empleado) => (
-                        <option key={empleado.id_empleado} value={empleado.id_empleado}>
-                          {empleado.nombre} {empleado.apellido_paterno} · {empleado.rol}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                </>
+                </div>
               )}
             </div>
           </section>
@@ -2048,7 +2455,7 @@ export default function PedidosPage() {
                   abrirPago(pedido);
                 }}
               >
-                Registrar pago
+                Pago
               </Button>
             )}
             {detail && puedeCambiarEstado(detail) && (
@@ -2061,6 +2468,19 @@ export default function PedidosPage() {
                 }}
               >
                 Cambiar estado
+              </Button>
+            )}
+            {detail && puedeDevolver(detail) && (
+              <Button
+                variant="ghost"
+                className="text-amber-700 hover:bg-amber-50"
+                onClick={() => {
+                  const pedido = detail;
+                  abrirDevolucion(pedido);
+                }}
+              >
+                <RotateCcw className="mr-1 h-4 w-4" />
+                Devolución
               </Button>
             )}
             {detail && puedeCancelar(detail) && (
@@ -2127,15 +2547,29 @@ export default function PedidosPage() {
                 </dd>
               </div>
               <div className="rounded-xl bg-sand/70 p-3">
-                <dt className="text-xs text-muted">Empleado</dt>
-                <dd className="mt-1 font-semibold">{detail.empleado_nombre}</dd>
+                <dt className="text-xs text-muted">Registrado por</dt>
+                <dd className="mt-1 font-semibold">{detail.empleado_nombre || 'No registrado'}</dd>
               </div>
               <div className="rounded-xl bg-sand/70 p-3">
-                <dt className="text-xs text-muted">Fecha</dt>
+                <dt className="text-xs text-muted">Entregado por</dt>
+                <dd className="mt-1 font-semibold">
+                  {detail.empleado_entrega_nombre || (detail.estado === 'entregado' ? 'Entregado (Sin empleado asignado)' : 'Pendiente de entrega')}
+                </dd>
+              </div>
+              <div className="rounded-xl bg-sand/70 p-3">
+                <dt className="text-xs text-muted">Fecha de registro</dt>
                 <dd className="mt-1 font-semibold">
                   {formatDateTime(detail.fecha_pedido)}
                 </dd>
               </div>
+              {detail.fecha_entrega_real && (
+                <div className="rounded-xl bg-sand/70 p-3">
+                  <dt className="text-xs text-muted">Fecha de entrega</dt>
+                  <dd className="mt-1 font-semibold">
+                    {formatDateTime(detail.fecha_entrega_real)}
+                  </dd>
+                </div>
+              )}
             </dl>
 
             <div>
@@ -2678,6 +3112,136 @@ export default function PedidosPage() {
           </form>
         )}
       </Modal>
-    </div>
-  );
+
+      <Modal
+        open={quickClienteModalOpen}
+        onClose={() => !quickClienteLoading && setQuickClienteModalOpen(false)}
+        title="Registrar cliente rápido"
+        description="Captura los datos del cliente para asociarlo directamente a este pedido."
+        size="md"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setQuickClienteModalOpen(false)}
+              disabled={quickClienteLoading}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="primary"
+              type="submit"
+              form="form-quick-cliente"
+              loading={quickClienteLoading}
+            >
+              Guardar y seleccionar
+            </Button>
+          </>
+        }
+      >
+        <form id="form-quick-cliente" className="space-y-4" onSubmit={handleGuardarClienteRapido}>
+          {quickClienteError && <Alert>{quickClienteError}</Alert>}
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Nombre" htmlFor="quick-nombre" required>
+              <input
+                id="quick-nombre"
+                type="text"
+                className={inputClass()}
+                value={quickClienteForm.nombre}
+                onChange={(e) =>
+                  setQuickClienteForm((prev) => ({ ...prev, nombre: e.target.value }))
+                }
+                placeholder="Nombre(s)"
+                required
+              />
+            </Field>
+
+            <Field label="Apellido paterno" htmlFor="quick-apellido" required>
+              <input
+                id="quick-apellido"
+                type="text"
+                className={inputClass()}
+                value={quickClienteForm.apellido_paterno}
+                onChange={(e) =>
+                  setQuickClienteForm((prev) => ({ ...prev, apellido_paterno: e.target.value }))
+                }
+                placeholder="Apellido paterno"
+                required
+              />
+            </Field>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Teléfono" htmlFor="quick-telefono" hint="10 dígitos numéricos" required>
+              <input
+                id="quick-telefono"
+                type="tel"
+                maxLength={15}
+                className={inputClass()}
+                value={quickClienteForm.telefono}
+                onChange={(e) =>
+                  setQuickClienteForm((prev) => ({ ...prev, telefono: e.target.value }))
+                }
+                placeholder="Ej. 9511234567"
+                required
+              />
+            </Field>
+
+            <Field label="Correo (opcional)" htmlFor="quick-correo">
+              <input
+                id="quick-correo"
+                type="email"
+                className={inputClass()}
+                value={quickClienteForm.correo}
+                onChange={(e) =>
+                  setQuickClienteForm((prev) => ({ ...prev, correo: e.target.value }))
+                }
+                placeholder="correo@ejemplo.com"
+              />
+            </Field>
+          </div>
+
+          <Field label="Dirección / Referencia" htmlFor="quick-direccion">
+            <input
+              id="quick-direccion"
+              type="text"
+              className={inputClass()}
+              value={quickClienteForm.direccion}
+              onChange={(e) =>
+                setQuickClienteForm((prev) => ({ ...prev, direccion: e.target.value }))
+              }
+              placeholder="Calle, número o referencia de entrega"
+            />
+          </Field>
+
+          <div className="rounded-xl border border-line bg-sand/30 p-3.5">
+            <label htmlFor="quick-es-frecuente" className="flex items-start gap-3 cursor-pointer select-none">
+              <input
+                id="quick-es-frecuente"
+                type="checkbox"
+                checked={quickClienteForm.es_frecuente}
+                onChange={(e) =>
+                  setQuickClienteForm((prev) => ({ ...prev, es_frecuente: e.target.checked }))
+                }
+                className="mt-0.5 h-4 w-4 rounded border-line text-charcoal focus:ring-charcoal"
+              />
+              <div>
+                <span className="font-semibold text-sm text-ink">¿Cliente frecuente?</span>
+                <p className="text-xs text-muted mt-0.5">
+                  {quickClienteForm.es_frecuente
+                    ? 'Se guardará en el apartado de Clientes para futuras compras.'
+                    : 'Solo se guardarán sus datos para este pedido (no se guardará en el apartado de clientes).'}
+                </p>
+              </div>
+            </label>
+          </div>
+        </form>
+      </Modal>
+    </>
+  ) : (
+    <DevolucionesPage embedded />
+  )}
+</div>
+);
 }

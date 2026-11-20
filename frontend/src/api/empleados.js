@@ -36,4 +36,11 @@ export const empleadosApi = {
       body: JSON.stringify({ estado }),
     });
   },
+
+  setSucursal(id, id_sucursal) {
+    return request(`/empleados/${id}/sucursal`, {
+      method: 'PATCH',
+      body: JSON.stringify({ id_sucursal }),
+    });
+  },
 };

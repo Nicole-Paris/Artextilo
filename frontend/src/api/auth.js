@@ -28,4 +28,11 @@ export const authApi = {
       body: JSON.stringify(payload),
     });
   },
+
+  actualizarPerfil(payload) {
+    return request('/auth/perfil', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
 };

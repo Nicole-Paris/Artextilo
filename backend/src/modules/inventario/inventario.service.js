@@ -57,6 +57,23 @@ export async function listInventario({
   id_categoria = null,
   bajo_stock = false,
 } = {}) {
+  if (id_sucursal) {
+    // Sincronizar automáticamente para que todos los productos activos existan en el inventario de esta sucursal
+    await pool.execute(
+      `INSERT INTO inventario (id_producto, id_sucursal, stock_actual, stock_minimo)
+       SELECT p.id_producto, ?, 0, 5
+       FROM producto p
+       WHERE p.deleted_at IS NULL AND p.estado = 'activo'
+         AND NOT EXISTS (
+           SELECT 1 FROM inventario i
+           WHERE i.id_producto = p.id_producto
+             AND i.id_sucursal = ?
+             AND i.deleted_at IS NULL
+         )`,
+      [Number(id_sucursal), Number(id_sucursal)],
+    );
+  }
+
   const params = [];
   let sql = `${BASE_INVENTARIO_SELECT}
     WHERE i.deleted_at IS NULL

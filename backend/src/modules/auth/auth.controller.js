@@ -3,12 +3,14 @@ import {
   restablecerPasswordSchema,
   solicitarRecuperacionSchema,
   verificarCodigoSchema,
+  updatePerfilSchema,
 } from './auth.schema.js';
 import {
   loginEmpleado,
   restablecerPassword,
   solicitarRecuperacion,
   verificarCodigo,
+  actualizarPerfil,
 } from './auth.service.js';
 
 export async function login(req, res) {
@@ -52,5 +54,16 @@ export async function cambiarPassword(req, res) {
     success: true,
     data: resultado,
     message: resultado.message,
+  });
+}
+
+export async function modificarPerfil(req, res) {
+  const payload = updatePerfilSchema.parse(req.body);
+  const resultado = await actualizarPerfil(payload);
+
+  res.json({
+    success: true,
+    data: resultado,
+    message: 'Perfil actualizado correctamente',
   });
 }

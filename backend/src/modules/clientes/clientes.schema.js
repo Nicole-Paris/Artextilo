@@ -65,6 +65,7 @@ export const clientePayloadSchema = z.object({
     .transform((value) => (value ? value : null)),
   tiene_credito: z.boolean().optional(),
   limite_credito: z.unknown().optional(),
+  es_frecuente: z.boolean().optional().default(true),
 }).superRefine((payload, ctx) => {
   if (payload.tiene_credito === false) return;
   if (payload.tiene_credito === true || payload.limite_credito !== undefined) {

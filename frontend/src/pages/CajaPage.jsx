@@ -713,8 +713,8 @@ export default function CajaPage() {
             <p className="font-semibold">No hay empleados activos.</p>
             <p className="mt-1">
               Registra al menos un empleado en{' '}
-              <Link to="/empleados?nuevo=1" className="font-semibold underline">
-                Empleados
+              <Link to="/sucursales" className="font-semibold underline">
+                Sucursales
               </Link>{' '}
               antes de abrir una caja.
             </p>

@@ -38,6 +38,19 @@ export const verificarCodigoSchema = z.object({
     .regex(/^\d{6}$/, 'El código debe tener exactamente 6 dígitos numéricos'),
 });
 
+export const updatePerfilSchema = z.object({
+  id_empleado: z.coerce.number().int().positive(),
+  correo: z
+    .string({ error: 'El correo electrónico es obligatorio' })
+    .trim()
+    .min(1, 'El correo electrónico es obligatorio')
+    .email('Ingresa un correo electrónico válido')
+    .max(100, 'El correo no puede exceder 100 caracteres')
+    .transform((value) => value.toLowerCase()),
+  contrasena_actual: z.string().optional().nullable(),
+  nueva_contrasena: z.string().optional().nullable(),
+});
+
 export const restablecerPasswordSchema = z
   .object({
     correo: z

@@ -129,7 +129,18 @@ export async function createProducto(data, userId = null) {
     ],
   );
 
-  return getProducto(result.insertId);
+  const idProducto = result.insertId;
+
+  // Inicializar automáticamente este producto en el inventario de todas las sucursales activas
+  await pool.execute(
+    `INSERT INTO inventario (id_producto, id_sucursal, stock_actual, stock_minimo)
+     SELECT ?, s.id_sucursal, 0, 5
+     FROM sucursal s
+     WHERE s.deleted_at IS NULL AND s.estado = 'activa'`,
+    [idProducto],
+  );
+
+  return getProducto(idProducto);
 }
 
 export async function updateProducto(id, data, userId = null) {

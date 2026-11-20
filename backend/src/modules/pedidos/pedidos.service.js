@@ -40,6 +40,7 @@ const BASE_PEDIDO_SELECT = `
     c.telefono AS cliente_telefono,
     c.correo AS cliente_correo,
     CONCAT_WS(' ', e.nombre, e.apellido_paterno) AS empleado_nombre,
+    CONCAT_WS(' ', ee.nombre, ee.apellido_paterno) AS empleado_entrega_nombre,
     s.nombre AS sucursal_nombre,
     COALESCE((
       SELECT SUM(pg.monto)
@@ -49,6 +50,7 @@ const BASE_PEDIDO_SELECT = `
   FROM pedido p
   INNER JOIN cliente c ON c.id_cliente = p.id_cliente
   INNER JOIN empleado e ON e.id_empleado = p.id_empleado
+  LEFT JOIN empleado ee ON ee.id_empleado = p.id_empleado_entrega
   INNER JOIN sucursal s ON s.id_sucursal = p.id_sucursal
 `;
 
@@ -539,7 +541,8 @@ export async function createPedido(payload, userId = null) {
         descuentoFinal = Math.round((subtotal * porcentaje) / 100);
       }
     } else if (descuento_tipo === 'manual') {
-      if (!id_descuento_autoriza) {
+      const idAutorizaFinal = id_descuento_autoriza || id_empleado;
+      if (!idAutorizaFinal) {
         throw ApiError.badRequest(
           'El descuento manual requiere indicar al empleado que lo autoriza',
         );
@@ -548,8 +551,9 @@ export async function createPedido(payload, userId = null) {
         throw ApiError.badRequest('El descuento manual requiere un motivo');
       }
 
-      await getEmpleadoActivo(connection, id_descuento_autoriza);
+      await getEmpleadoActivo(connection, idAutorizaFinal);
       descuentoFinal = Number(descuento_monto);
+      id_descuento_autoriza = idAutorizaFinal;
     }
 
     if (descuentoFinal > subtotal) {

@@ -143,7 +143,7 @@ export async function createEmpleado(payload) {
     [
       nombre,
       apellido_paterno,
-      apellido_materno,
+      apellido_materno ?? '',
       correo,
       telefono,
       hashedPassword,
@@ -190,7 +190,7 @@ export async function updateEmpleado(id, payload) {
   const params = [
     nombre,
     apellido_paterno,
-    apellido_materno,
+    apellido_materno ?? '',
     correo,
     telefono,
     id_rol,
@@ -227,6 +227,16 @@ export async function updateEmpleado(id, payload) {
 export async function updateEstadoEmpleado(id, estado) {
   await getEmpleado(id);
   await pool.execute('UPDATE empleado SET estado = ? WHERE id_empleado = ?', [estado, id]);
+  return getEmpleado(id);
+}
+
+export async function updateSucursalEmpleado(id, id_sucursal) {
+  await getEmpleado(id);
+  const idSucursalFinal = await resolveSucursal(id_sucursal);
+  await pool.execute('UPDATE empleado SET id_sucursal = ? WHERE id_empleado = ?', [
+    idSucursalFinal,
+    id,
+  ]);
   return getEmpleado(id);
 }
 

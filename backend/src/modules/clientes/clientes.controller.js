@@ -14,7 +14,8 @@ import {
 
 export async function index(req, res) {
   const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
-  const clientes = await listClientes({ search });
+  const solo_frecuentes = req.query.solo_frecuentes === 'true';
+  const clientes = await listClientes({ search, solo_frecuentes });
   res.json({ data: clientes });
 }
 

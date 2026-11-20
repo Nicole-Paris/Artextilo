@@ -89,6 +89,13 @@ export const empleadoEstadoSchema = z.object({
   }),
 });
 
+export const empleadoSucursalSchema = z.object({
+  id_sucursal: z.coerce
+    .number({ error: 'El ID de la sucursal debe ser numérico' })
+    .int('El ID de la sucursal debe ser entero')
+    .positive('El ID de la sucursal debe ser mayor a cero'),
+});
+
 export const empleadoIdSchema = z.coerce
   .number({ error: 'El ID debe ser numérico' })
   .int('El ID debe ser entero')

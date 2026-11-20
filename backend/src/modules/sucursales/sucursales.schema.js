@@ -11,6 +11,18 @@ export const sucursalPayloadSchema = z.object({
     .trim()
     .min(1, 'La dirección es obligatoria')
     .max(100, 'La dirección no puede exceder 100 caracteres'),
+  ciudad: z
+    .string()
+    .trim()
+    .max(60, 'La ciudad no puede exceder 60 caracteres')
+    .optional()
+    .default('Oaxaca de Juárez'),
+  estado_republica: z
+    .string()
+    .trim()
+    .max(60, 'El estado no puede exceder 60 caracteres')
+    .optional()
+    .default('Oaxaca'),
   codigo_postal: z
     .string({ error: 'El código postal es obligatorio' })
     .trim()
@@ -24,6 +36,7 @@ export const sucursalPayloadSchema = z.object({
     .trim()
     .min(1, 'El horario es obligatorio')
     .max(100, 'El horario no puede exceder 100 caracteres'),
+  empleados_ids: z.array(z.coerce.number().int().positive()).optional().default([]),
 });
 
 export const sucursalIdSchema = z.coerce
