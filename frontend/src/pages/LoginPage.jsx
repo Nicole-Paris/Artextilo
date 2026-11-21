@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, LoaderCircle, LockKeyhole, Mail } from 'lucide-react';
+import { Eye, EyeOff, LoaderCircle } from 'lucide-react';
 import { authApi } from '../api/auth.js';
 import { globalValuesApi } from '../api/global-values.js';
+import Alert from '../components/Alert.jsx';
 import RecuperarPasswordModal from '../components/RecuperarPasswordModal.jsx';
 
 export default function LoginPage() {
@@ -53,10 +54,7 @@ export default function LoginPage() {
         throw new Error('No se recibieron los datos del empleado.');
       }
 
-      localStorage.setItem(
-        'artextilo_empleado',
-        JSON.stringify(response.data),
-      );
+      localStorage.setItem('artextilo_empleado', JSON.stringify(response.data));
 
       navigate('/', { replace: true });
     } catch (err) {
@@ -67,70 +65,132 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#F9F9F9] px-4 py-10">
-      <div className="w-full max-w-md">
+    <main className="min-h-screen w-full grid grid-cols-1 md:grid-cols-2 bg-white">
+      {/* SECCIÓN IZQUIERDA: FONDO NEGRO CON TEXTO Y LOGOTIPO */}
+      <section className="relative flex flex-col justify-between bg-black px-8 py-10 sm:px-12 md:py-16 lg:px-16 text-white min-h-[380px] md:min-h-screen">
+        {/* PARTE SUPERIOR: BIENVENIDO Y "ARTE QUE SE LLEVA CONTIGO" */}
+        <div className="space-y-2">
+          <p className="font-sans text-xs sm:text-sm font-bold tracking-[0.25em] text-[#AF9241] uppercase">
+            Bienvenido
+          </p>
+          <h1 className="font-display text-lg sm:text-xl lg:text-2xl font-normal leading-snug text-white">
+            Arte que se lleva contigo
+          </h1>
+        </div>
 
-        <div className="mb-4 text-center">
-          <img
-            src={logoUrl || '/logo-artextilo.jpeg'}
-            alt="Artextilo, hilando con amor"
-            className="mx-auto mb-2 h-auto w-36 object-contain"
-            onError={(e) => {
-              e.currentTarget.src = '/logo-artextilo.jpeg';
-            }}
-          />
+        {/* PARTE CENTRAL: LOGOTIPO DE ARTEXTILO */}
+        <div className="my-auto flex flex-col items-center justify-center py-6">
+          <div className="flex h-52 w-52 sm:h-64 sm:w-64 lg:h-72 lg:w-72 items-center justify-center">
+            <img
+              src={logoUrl || '/logo-artextilo.jpeg'}
+              alt="Artextilo"
+              className="max-h-full max-w-full object-contain filter drop-shadow-xl"
+              onError={(e) => {
+                e.currentTarget.src = '/logo-artextilo.jpeg';
+              }}
+            />
+          </div>
 
-          <p className="mt-1 text-sm text-[#766E65]">
-            Sistema de gestión administrativa
+          {/* LÍNEA DIVISORIA DORADA */}
+          <div className="mt-8 w-28 sm:w-36 border-t-2 border-[#AF9241]" />
+
+          <p className="mt-6 max-w-md text-center text-lg sm:text-xl lg:text-2xl leading-relaxed text-neutral-300 font-display">
+            Accede a tu cuenta y descubre piezas únicas elaboradas a mano por artesanas.
           </p>
         </div>
 
-        <div className="rounded-2xl border border-[#E5E5E5] bg-white p-7 shadow-xl sm:p-9">
-          <div className="mb-7">
-            <h2 className="font-display text-2xl font-semibold text-black">
-              Bienvenido
+        {/* PIE DE PÁGINA IZQUIERDO */}
+        <div className="pt-4 text-xs text-neutral-500">
+          <p>© {new Date().getFullYear()} Artextilo · Hilando con amor</p>
+        </div>
+      </section>
+
+      {/* SECCIÓN DERECHA: FONDO BLANCO CON FORMULARIO DE ACCESO */}
+      <section className="flex flex-col justify-center items-center px-6 py-12 sm:px-12 md:px-16 lg:px-20 bg-white">
+        <div className="w-full max-w-md space-y-8">
+          {/* TÍTULO INICIAR SESIÓN CON SUBRAYADO */}
+          <div className="text-center">
+            <h2 className="font-sans text-xl sm:text-2xl font-semibold tracking-wider text-black uppercase">
+              Iniciar Sesión
             </h2>
-            <p className="mt-1 text-sm text-[#766E65]">
-              Ingresa tus datos para acceder al sistema.
-            </p>
+            <div className="mx-auto mt-2 h-0.5 w-24 bg-black" />
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          {/* ALERTA DE ÉXITO O ERROR */}
+          {exitoMensaje && (
+            <Alert type="success">{exitoMensaje}</Alert>
+          )}
 
-            <div>
+          {error && (
+            <Alert type="error">{error}</Alert>
+          )}
+
+          {/* FORMULARIO */}
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* CORREO ELECTRÓNICO */}
+            <div className="space-y-2">
               <label
                 htmlFor="correo"
-                className="mb-2 block text-sm font-semibold text-black"
+                className="block text-xs font-bold tracking-wider text-neutral-600 uppercase"
               >
-                Correo electrónico
+                Correo Electrónico
+              </label>
+              <input
+                id="correo"
+                type="email"
+                value={correo}
+                onChange={(event) => setCorreo(event.target.value)}
+                placeholder="ejemplo@artextilo.com"
+                autoComplete="username"
+                required
+                disabled={cargando}
+                className="w-full rounded-md border border-neutral-300 bg-white px-4 py-3 text-sm text-black outline-none transition placeholder:text-neutral-400 focus:border-black focus:ring-1 focus:ring-black disabled:bg-neutral-100"
+              />
+            </div>
+
+            {/* CONTRASEÑA */}
+            <div className="space-y-2">
+              <label
+                htmlFor="contrasena"
+                className="block text-xs font-bold tracking-wider text-neutral-600 uppercase"
+              >
+                Contraseña
               </label>
 
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-[#766E65]" />
-
                 <input
-                  id="correo"
-                  type="email"
-                  value={correo}
-                  onChange={(event) => setCorreo(event.target.value)}
-                  placeholder="empleado@artextilo.com"
-                  autoComplete="username"
+                  id="contrasena"
+                  type={mostrarContrasena ? 'text' : 'password'}
+                  value={contrasena}
+                  onChange={(event) => setContrasena(event.target.value)}
+                  placeholder="••••••••"
+                  autoComplete="current-password"
                   required
                   disabled={cargando}
-                  className="w-full rounded-xl border border-[#E5E5E5] bg-white py-3 pl-11 pr-4 text-sm text-black outline-none transition placeholder:text-gray-400 focus:border-[#AF9241] focus:ring-2 focus:ring-[#AF9241]/20 disabled:bg-gray-100"
+                  className="w-full rounded-md border border-neutral-300 bg-white px-4 py-3 pr-11 text-sm text-black outline-none transition placeholder:text-neutral-400 focus:border-black focus:ring-1 focus:ring-black disabled:bg-neutral-100"
                 />
-              </div>
-            </div>
 
-            <div>
-              <div className="mb-2 flex items-center justify-between">
-                <label
-                  htmlFor="contrasena"
-                  className="block text-sm font-semibold text-black"
+                <button
+                  type="button"
+                  onClick={() => setMostrarContrasena(!mostrarContrasena)}
+                  disabled={cargando}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-black transition"
+                  aria-label={
+                    mostrarContrasena
+                      ? 'Ocultar contraseña'
+                      : 'Mostrar contraseña'
+                  }
                 >
-                  Contraseña
-                </label>
+                  {mostrarContrasena ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
 
+              {/* ENLACE DE RECUPERACIÓN */}
+              <div className="pt-1 text-right">
                 <button
                   type="button"
                   onClick={() => {
@@ -144,87 +204,34 @@ export default function LoginPage() {
                   ¿Olvidaste tu contraseña?
                 </button>
               </div>
-
-              <div className="relative">
-                <LockKeyhole className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-[#766E65]" />
-
-                <input
-                  id="contrasena"
-                  type={mostrarContrasena ? 'text' : 'password'}
-                  value={contrasena}
-                  onChange={(event) => setContrasena(event.target.value)}
-                  placeholder="Ingresa tu contraseña"
-                  autoComplete="current-password"
-                  required
-                  disabled={cargando}
-                  className="w-full rounded-xl border border-[#E5E5E5] bg-white py-3 pl-11 pr-12 text-sm text-black outline-none transition placeholder:text-gray-400 focus:border-[#AF9241] focus:ring-2 focus:ring-[#AF9241]/20 disabled:bg-gray-100"
-                />
-
-                <button
-                  type="button"
-                  onClick={() => setMostrarContrasena(!mostrarContrasena)}
-                  disabled={cargando}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#766E65] transition hover:text-[#AF9241]"
-                  aria-label={
-                    mostrarContrasena
-                      ? 'Ocultar contraseña'
-                      : 'Mostrar contraseña'
-                  }
-                >
-                  {mostrarContrasena
-                    ? <EyeOff className="h-5 w-5" />
-                    : <Eye className="h-5 w-5" />}
-                </button>
-              </div>
             </div>
 
-            {exitoMensaje && (
-              <div
-                role="status"
-                className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700 font-medium leading-relaxed"
-              >
-                {exitoMensaje}
-              </div>
-            )}
-
-            {error && (
-              <div
-                role="alert"
-                className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-              >
-                {error}
-              </div>
-            )}
-
+            {/* BOTÓN INICIAR SESIÓN NEGRO */}
             <button
               type="submit"
               disabled={cargando}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#AF9241] px-4 py-3.5 text-sm font-bold text-white shadow-md transition hover:bg-[#8A7232] disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded-md bg-black px-4 py-3.5 text-xs sm:text-sm font-bold uppercase tracking-wider text-white shadow-sm transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {cargando ? (
                 <>
-                  <LoaderCircle className="h-5 w-5 animate-spin" />
+                  <LoaderCircle className="h-4 w-4 animate-spin" />
                   Iniciando sesión...
                 </>
               ) : (
-                'Iniciar sesión'
+                'Iniciar Sesión'
               )}
             </button>
           </form>
 
-          <div className="mt-7">
-            <div className="h-px bg-[#E5E5E5]" />
-            <p className="mt-5 text-center text-xs text-[#766E65]">
-              Acceso exclusivo para personal autorizado.
+          <div className="pt-4 text-center">
+            <p className="text-xs text-neutral-400">
+              Acceso exclusivo para personal y colaboradores autorizados.
             </p>
           </div>
         </div>
+      </section>
 
-        <p className="mt-6 text-center text-xs text-[#766E65]">
-          © {new Date().getFullYear()} Artextilo · Todos los derechos reservados.
-        </p>
-      </div>
-
+      {/* MODAL DE RECUPERACIÓN DE CONTRASEÑA */}
       <RecuperarPasswordModal
         open={modalRecuperarOpen}
         onClose={() => setModalRecuperarOpen(false)}
@@ -232,7 +239,9 @@ export default function LoginPage() {
         onPasswordChanged={(correoActualizado) => {
           setCorreo(correoActualizado);
           setContrasena('');
-          setExitoMensaje('¡Contraseña restablecida con éxito! Ingresa tu nueva contraseña para acceder.');
+          setExitoMensaje(
+            '¡Contraseña restablecida con éxito! Ingresa tu nueva contraseña para acceder.',
+          );
         }}
       />
     </main>
