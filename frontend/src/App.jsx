@@ -13,6 +13,8 @@ import EmpleadosPage from './pages/EmpleadosPage.jsx';
 import InventarioPage from './pages/InventarioPage.jsx';
 import NotFound from './pages/NotFound.jsx';
 import PedidosPage from './pages/PedidosPage.jsx';
+import PuntoVentaPage from './pages/PuntoVentaPage.jsx';
+import ReportesPage from './pages/ReportesPage.jsx';
 import SucursalesPage from './pages/SucursalesPage.jsx';
 import CategoriaPage from './pages/CategoriaPage.jsx';
 import ProductosPage from './pages/ProductosPage.jsx';
@@ -26,6 +28,8 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
           <Route index element={<Dashboard />} />
+          <Route path="pos" element={<PuntoVentaPage />} />
+          <Route path="punto-de-venta" element={<Navigate to="/pos" replace />} />
           <Route path="clientes" element={<ClientesPage />} />
           <Route path="empleados" element={<Navigate to="/sucursales" replace />} />
           <Route path="sucursales" element={<SucursalesPage />} />
@@ -34,6 +38,7 @@ export default function App() {
           <Route path="inventario" element={<InventarioPage />} />
           <Route path="caja" element={<CajaPage />} />
           <Route path="pedidos" element={<PedidosPage />} />
+          <Route path="reportes" element={<ReportesPage />} />
           <Route path="devoluciones" element={<Navigate to="/pedidos?tab=devoluciones" replace />} />
           <Route path="global-values" element={<GlobalValuesPage />} />
           <Route path="*" element={<NotFound />} />

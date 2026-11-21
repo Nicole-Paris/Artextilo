@@ -137,8 +137,8 @@ export default function Dashboard() {
   return (
     <div>
       <PageHeader
-        title="Reportes"
-        description="Resumen de ventas, caja e inventario de Artextilo."
+        title="Inicio"
+        description="Resumen operativo general, estado de pedidos, inventario y accesos directos."
       />
 
       {error && (
@@ -200,10 +200,10 @@ export default function Dashboard() {
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <h2 className="font-display text-2xl font-semibold text-ink">
-              Reportes rápidos
+              Resumen operativo
             </h2>
             <p className="mt-1 text-sm text-muted">
-              Un vistazo al estado operativo de la tienda.
+              Un vistazo al estado general de la tienda.
             </p>
           </div>
           <Link

@@ -18,10 +18,28 @@ export const globalValuesApi = {
     return request(`/global-values/${id}`);
   },
 
+  create(payload) {
+    return request('/global-values', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
   update(id, payload) {
     return request(`/global-values/${id}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
+    });
+  },
+
+  getLogo() {
+    return request('/global-values/logo');
+  },
+
+  updateLogo(logo) {
+    return request('/global-values/logo', {
+      method: 'PUT',
+      body: JSON.stringify({ logo }),
     });
   },
 };

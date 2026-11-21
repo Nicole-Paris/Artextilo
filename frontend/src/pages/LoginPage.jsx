@@ -1,12 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, LoaderCircle, LockKeyhole, Mail } from 'lucide-react';
 import { authApi } from '../api/auth.js';
+import { globalValuesApi } from '../api/global-values.js';
 import RecuperarPasswordModal from '../components/RecuperarPasswordModal.jsx';
 
 export default function LoginPage() {
   const navigate = useNavigate();
 
+  const [logoUrl, setLogoUrl] = useState(
+    () => localStorage.getItem('artextilo_logo') || '/logo-artextilo.jpeg',
+  );
   const [correo, setCorreo] = useState('');
   const [contrasena, setContrasena] = useState('');
   const [mostrarContrasena, setMostrarContrasena] = useState(false);
@@ -14,6 +18,18 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [exitoMensaje, setExitoMensaje] = useState('');
   const [modalRecuperarOpen, setModalRecuperarOpen] = useState(false);
+
+  useEffect(() => {
+    globalValuesApi
+      .getLogo()
+      .then((res) => {
+        if (res?.data?.logo) {
+          setLogoUrl(res.data.logo);
+          localStorage.setItem('artextilo_logo', res.data.logo);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -56,9 +72,12 @@ export default function LoginPage() {
 
         <div className="mb-4 text-center">
           <img
-            src="/logo-artextilo.jpeg"
+            src={logoUrl || '/logo-artextilo.jpeg'}
             alt="Artextilo, hilando con amor"
-            className="mx-auto mb-2 h-auto w-36 object-contain mix-blend-multiply"
+            className="mx-auto mb-2 h-auto w-36 object-contain"
+            onError={(e) => {
+              e.currentTarget.src = '/logo-artextilo.jpeg';
+            }}
           />
 
           <p className="mt-1 text-sm text-[#766E65]">

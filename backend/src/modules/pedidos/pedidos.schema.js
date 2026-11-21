@@ -91,9 +91,12 @@ const servicioPayloadSchema = z.object({
 
 export const pedidoCreatePayloadSchema = z.object({
   id_cliente: z.coerce
-    .number({ error: 'El cliente es obligatorio' })
+    .number()
     .int('El cliente debe ser un ID válido')
-    .positive('El cliente debe ser un ID válido'),
+    .positive('El cliente debe ser un ID válido')
+    .optional()
+    .nullable(),
+  es_venta_directa: z.boolean().optional().default(false),
   id_empleado: z.coerce
     .number({ error: 'El empleado es obligatorio' })
     .int('El empleado debe ser un ID válido')
@@ -151,6 +154,21 @@ export const pedidoCreatePayloadSchema = z.object({
   productos: z.array(productoPayloadSchema).default([]),
   servicios: z.array(servicioPayloadSchema).default([]),
   pago_inicial: pagoPayloadSchema.optional().nullable(),
+}).superRefine((data, ctx) => {
+  if (!data.es_venta_directa && !data.id_cliente) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['id_cliente'],
+      message: 'El cliente es obligatorio para pedidos',
+    });
+  }
+  if (data.es_venta_directa && (!data.productos || data.productos.length === 0)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['productos'],
+      message: 'La venta en punto de venta debe incluir al menos un producto',
+    });
+  }
 });
 
 export const pedidoEstadoPayloadSchema = z.object({

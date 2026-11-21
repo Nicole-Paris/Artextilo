@@ -106,6 +106,36 @@ function mergeProductos(productos = []) {
   return [...merged.values()];
 }
 
+async function getOrCreatePublicoGeneral(connection) {
+  const [rows] = await connection.execute(
+    `SELECT id_cliente, nombre, apellido_paterno, apellido_materno, telefono,
+            tiene_credito, limite_credito
+     FROM cliente
+     WHERE nombre = 'Público' AND apellido_paterno = 'en General' AND deleted_at IS NULL
+     LIMIT 1`,
+  );
+  if (rows.length > 0) return rows[0];
+
+  const [insertResult] = await connection.execute(
+    `INSERT INTO cliente (
+       nombre, apellido_paterno, apellido_materno, telefono, correo, direccion,
+       ciudad, estado_republica, codigo_postal, es_frecuente, tiene_credito, limite_credito
+     ) VALUES (
+       'Público', 'en General', '', '0000000000', NULL, 'Venta mostrador',
+       'Oaxaca', 'Oaxaca', '68000', 0, 0, 0
+     )`,
+  );
+  return {
+    id_cliente: insertResult.insertId,
+    nombre: 'Público',
+    apellido_paterno: 'en General',
+    apellido_materno: '',
+    telefono: '0000000000',
+    tiene_credito: 0,
+    limite_credito: 0,
+  };
+}
+
 async function getClienteActivo(connection, id_cliente) {
   const [rows] = await connection.execute(
     `SELECT id_cliente, nombre, apellido_paterno, apellido_materno, telefono,
@@ -457,6 +487,7 @@ export async function createPedido(payload, userId = null) {
     id_cliente,
     id_empleado,
     id_sucursal,
+    es_venta_directa = false,
     origen = 'presencial',
     condicion_pago = 'contado',
     forma_entrega = 'en_local',
@@ -478,7 +509,14 @@ export async function createPedido(payload, userId = null) {
   try {
     await connection.beginTransaction();
 
-    const cliente = await getClienteActivo(connection, id_cliente);
+    let cliente = null;
+    let idClienteFinal = id_cliente;
+    if (!idClienteFinal) {
+      cliente = await getOrCreatePublicoGeneral(connection);
+      idClienteFinal = cliente.id_cliente;
+    } else {
+      cliente = await getClienteActivo(connection, idClienteFinal);
+    }
     const empleado = await getEmpleadoActivo(connection, id_empleado);
     await getSucursalActiva(connection, id_sucursal);
 
@@ -491,6 +529,10 @@ export async function createPedido(payload, userId = null) {
     const productosNormalizados = mergeProductos(productos);
     if (productosNormalizados.length === 0 && servicios.length === 0) {
       throw ApiError.badRequest('El pedido debe incluir al menos un producto o servicio');
+    }
+
+    if (es_venta_directa && productosNormalizados.length === 0) {
+      throw ApiError.badRequest('La venta en punto de venta debe incluir al menos un producto');
     }
 
     const detalles = [];
@@ -517,6 +559,10 @@ export async function createPedido(payload, userId = null) {
       precio: Number(servicio.precio || 0),
       imagen: servicio.imagen || null,
     }));
+
+    if (es_venta_directa && serviciosNormalizados.length > 0) {
+      throw ApiError.badRequest('El punto de venta no admite servicios diferidos');
+    }
 
     const subtotalServicios = serviciosNormalizados.reduce(
       (total, servicio) => total + servicio.cantidad * servicio.precio,
@@ -577,19 +623,32 @@ export async function createPedido(payload, userId = null) {
       'anticipo_porcentaje',
       50,
     );
-    const anticipoRequerido = Math.ceil((total * anticipoPorcentaje) / 100);
+    const anticipoRequerido = es_venta_directa ? total : Math.ceil((total * anticipoPorcentaje) / 100);
     const montoInicial = Number(pago_inicial?.monto || 0);
 
     if (total > 0 && !(montoInicial > 0)) {
-      throw ApiError.badRequest('El anticipo es obligatorio para crear el pedido.');
+      throw ApiError.badRequest(
+        es_venta_directa
+          ? 'La venta en punto de venta requiere cobro inmediato.'
+          : 'El anticipo es obligatorio para crear el pedido.',
+      );
+    }
+
+    if (es_venta_directa && montoInicial < total) {
+      throw ApiError.badRequest(
+        `La venta en punto de venta debe ser liquidada al 100%. Monto requerido: ${total}.`,
+      );
     }
 
     if (condicion_pago === 'credito') {
+      if (es_venta_directa) {
+        throw ApiError.badRequest('Las ventas directas en mostrador no admiten crédito.');
+      }
       if (!cliente.tiene_credito) {
         throw ApiError.badRequest('El cliente no tiene crédito habilitado');
       }
 
-      const saldoActual = await getSaldoCreditoCliente(connection, id_cliente);
+      const saldoActual = await getSaldoCreditoCliente(connection, idClienteFinal);
       const limiteCredito = Number(cliente.limite_credito);
       if (saldoActual + total > limiteCredito) {
         throw ApiError.badRequest(
@@ -604,6 +663,8 @@ export async function createPedido(payload, userId = null) {
          id_empleado,
          id_sucursal,
          fecha_entrega_prometida,
+         fecha_entrega_real,
+         id_empleado_entrega,
          origen,
          condicion_pago,
          forma_entrega,
@@ -623,12 +684,14 @@ export async function createPedido(payload, userId = null) {
          estado,
          observaciones,
          created_by
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente', 'pendiente', ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente', ?, ?, ?)`,
       [
-        id_cliente,
+        idClienteFinal,
         id_empleado,
         id_sucursal,
-        fecha_entrega_prometida,
+        es_venta_directa ? new Date() : fecha_entrega_prometida,
+        es_venta_directa ? new Date() : null,
+        es_venta_directa ? id_empleado : null,
         origen,
         condicion_pago,
         forma_entrega,
@@ -644,6 +707,7 @@ export async function createPedido(payload, userId = null) {
         id_descuento_autoriza || null,
         total,
         anticipoRequerido,
+        es_venta_directa ? 'entregado' : 'pendiente',
         observaciones,
         userId || id_empleado,
       ],
@@ -693,7 +757,7 @@ export async function createPedido(payload, userId = null) {
           idPedido,
           detalleResult.insertId,
           detalle.cantidad,
-          'Salida por venta de pedido',
+          es_venta_directa ? 'Salida por venta en punto de venta' : 'Salida por venta de pedido',
           userId || id_empleado,
         ],
       );
@@ -749,7 +813,11 @@ export async function createPedido(payload, userId = null) {
       }
 
       const idCorteCaja = await getOpenCorteId(connection, idEmpleadoPago);
-      const concepto = montoInicial >= total ? 'liquidacion' : 'anticipo';
+      const concepto = es_venta_directa
+        ? 'liquidacion'
+        : montoInicial >= total
+          ? 'liquidacion'
+          : 'anticipo';
 
       await connection.execute(
         `INSERT INTO pago (

@@ -506,7 +506,11 @@ export default function EmpleadosPage() {
                         <p className="break-all">{empleado.correo}</p>
                         <p className="mt-1 whitespace-nowrap text-xs">{empleado.telefono}</p>
                       </td>
-                      <td className="px-4 py-4 text-muted sm:px-6">{empleado.rol}</td>
+                      <td className="px-4 py-4 text-muted sm:px-6">
+                        <span className="inline-flex items-center rounded-lg bg-sand/60 px-2.5 py-1 text-xs font-semibold capitalize text-ink">
+                          {empleado.rol}
+                        </span>
+                      </td>
                       <td className="px-4 py-4 sm:px-6">{renderEstadoBadge(empleado)}</td>
                       <td className="whitespace-nowrap px-4 py-4 text-right sm:px-6">
                         {renderActions(empleado)}
@@ -776,7 +780,7 @@ export default function EmpleadosPage() {
               <option value="">Selecciona un rol</option>
               {roles.map((rol) => (
                 <option key={rol.id_rol} value={rol.id_rol}>
-                  {rol.nombre}
+                  {rol.nombre ? rol.nombre.charAt(0).toUpperCase() + rol.nombre.slice(1) : ''}
                 </option>
               ))}
             </select>

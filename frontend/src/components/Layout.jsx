@@ -8,6 +8,7 @@ import {
 } from 'react-router-dom';
 
 import {
+  BarChart3,
   LayoutDashboard,
   Menu,
   Contact,
@@ -15,6 +16,7 @@ import {
   Users,
   X,
   Tag,
+  ShoppingBag,
   Package,
   Boxes,
   Receipt,
@@ -29,6 +31,7 @@ import {
 } from 'lucide-react';
 import { authApi } from '../api/auth.js';
 import { sucursalesApi } from '../api/sucursales.js';
+import { globalValuesApi } from '../api/global-values.js';
 import Field, { inputClass } from './Field.jsx';
 import Alert from './Alert.jsx';
 
@@ -37,8 +40,10 @@ import { useDialogFocus } from '../hooks/useDialogFocus.js';
 import Modal from './Modal.jsx';
 
 const navigation = [
-  { to: '/', label: 'Reportes', icon: LayoutDashboard, end: true },
+  { to: '/', label: 'Inicio', icon: LayoutDashboard, end: true },
+  { to: '/pos', label: 'Punto de venta', icon: ShoppingBag },
   { to: '/pedidos', label: 'Pedidos', icon: Receipt },
+  { to: '/reportes', label: 'Reportes', icon: BarChart3 },
   { to: '/clientes', label: 'Clientes', icon: Contact },
   { to: '/sucursales', label: 'Sucursales', icon: Store },
   { to: '/productos', label: 'Productos', icon: Package },
@@ -48,17 +53,19 @@ const navigation = [
 ];
 
 const routeTitles = {
-  '/': 'Reportes',
+  '/': 'Inicio',
+  '/pos': 'Punto de Venta',
+  '/pedidos': 'Pedidos y Pagos',
+  '/reportes': 'Reportes y Analíticas',
   '/clientes': 'Clientes',
   '/sucursales': 'Sucursales',
   '/productos': 'Catálogo de Productos',
   '/inventario': 'Control de Inventario y Movimientos',
   '/caja': 'Corte de Caja',
-  '/pedidos': 'Pedidos y Pagos',
   '/global-values': 'Valores Globales',
 };
 
-function SidebarContent({ onNavigate }) {
+function SidebarContent({ onNavigate, logoUrl }) {
   return (
     <>
       <Link
@@ -68,9 +75,12 @@ function SidebarContent({ onNavigate }) {
       >
         <div className="flex h-36 w-36 items-center justify-center">
           <img
-            src="/logo-artextilo.jpeg"
+            src={logoUrl || '/logo-artextilo.jpeg'}
             alt="Artextilo, hilando con amor"
             className="h-full w-full object-contain"
+            onError={(e) => {
+              e.currentTarget.src = '/logo-artextilo.jpeg';
+            }}
           />
         </div>
         <span className="mt-2 text-lg font-bold tracking-wider text-white">
@@ -133,6 +143,9 @@ export default function Layout() {
   const [profileError, setProfileError] = useState('');
   const [profileSuccess, setProfileSuccess] = useState('');
   const [sucursalesDisponibles, setSucursalesDisponibles] = useState([]);
+  const [logoUrl, setLogoUrl] = useState(
+    () => localStorage.getItem('artextilo_logo') || '/logo-artextilo.jpeg',
+  );
 
   const mobileAsideRef = useRef(null);
   const accountMenuRef = useRef(null);
@@ -140,6 +153,32 @@ export default function Layout() {
 
   const location = useLocation();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    function handleLogoChange(e) {
+      const updated =
+        e?.detail || localStorage.getItem('artextilo_logo') || '/logo-artextilo.jpeg';
+      setLogoUrl(updated);
+    }
+
+    window.addEventListener('artextilo_logo_updated', handleLogoChange);
+    window.addEventListener('storage', handleLogoChange);
+
+    globalValuesApi
+      .getLogo()
+      .then((res) => {
+        if (res?.data?.logo) {
+          setLogoUrl(res.data.logo);
+          localStorage.setItem('artextilo_logo', res.data.logo);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      window.removeEventListener('artextilo_logo_updated', handleLogoChange);
+      window.removeEventListener('storage', handleLogoChange);
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -348,7 +387,7 @@ export default function Layout() {
       </a>
 
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col bg-forest lg:flex">
-        <SidebarContent />
+        <SidebarContent logoUrl={logoUrl} />
       </aside>
 
       {sidebarOpen && (
@@ -380,6 +419,7 @@ export default function Layout() {
 
             <SidebarContent
               onNavigate={() => setSidebarOpen(false)}
+              logoUrl={logoUrl}
             />
           </aside>
         </div>

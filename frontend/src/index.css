@@ -92,3 +92,23 @@ input::-ms-clear {
       transparent 5px 11px);
   opacity: 0.35;
 }
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #pos-ticket-print,
+  #pos-ticket-print * {
+    visibility: visible;
+  }
+  #pos-ticket-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: none !important;
+    box-shadow: none !important;
+  }
+}
