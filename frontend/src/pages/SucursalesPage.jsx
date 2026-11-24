@@ -31,6 +31,7 @@ import { rolesApi } from '../api/roles.js';
 import { useDebouncedValue } from '../hooks/useDebouncedValue.js';
 import { cn } from '../lib/cn.js';
 import { formatDate } from '../lib/format.js';
+import { formatRole } from '../lib/roles.js';
 
 const EMPTY_FORM = {
   nombre: '',
@@ -77,7 +78,11 @@ export default function SucursalesPage() {
   // Modal para agregar o editar empleado directo en la sucursal seleccionada
   const [empleadoModalOpen, setEmpleadoModalOpen] = useState(false);
   const [editingEmpleado, setEditingEmpleado] = useState(null);
-  const [roles, setRoles] = useState([]);
+  const [roles, setRoles] = useState([
+    { id_rol: 1, nombre: 'administrador' },
+    { id_rol: 2, nombre: 'empleado' },
+    { id_rol: 4, nombre: 'supervisor' },
+  ]);
   const [empleadoForm, setEmpleadoForm] = useState(EMPTY_EMPLEADO_FORM);
   const [empleadoErrors, setEmpleadoErrors] = useState({});
   const [empleadoError, setEmpleadoError] = useState('');
@@ -773,7 +778,7 @@ export default function SucursalesPage() {
                             <p className="text-xs text-muted truncate">{emp.correo}</p>
                             <div className="mt-1 flex items-center justify-between text-[11px] text-muted">
                               <span className="font-medium bg-sand px-2 py-0.5 rounded text-clay">
-                                {emp.rol || 'Empleado'}
+                                {formatRole(emp.rol)}
                               </span>
                               <span>{emp.telefono}</span>
                             </div>
@@ -1026,7 +1031,7 @@ export default function SucursalesPage() {
                           </span>
                         </div>
                         <span className="text-[11px] text-muted">
-                          {emp.rol || 'Empleado'} {emp.sucursal ? `(${emp.sucursal})` : ''}
+                          {formatRole(emp.rol)} {emp.sucursal ? `(${emp.sucursal})` : ''}
                         </span>
                       </label>
                     );
@@ -1126,7 +1131,7 @@ export default function SucursalesPage() {
                 <option value="">Selecciona un rol</option>
                 {roles.map((r) => (
                   <option key={r.id_rol} value={r.id_rol}>
-                    {r.nombre}
+                    {formatRole(r.nombre)}
                   </option>
                 ))}
               </select>
@@ -1310,7 +1315,7 @@ export default function SucursalesPage() {
                     </div>
                     <div className="text-right shrink-0 space-y-0.5">
                       <span className="inline-block text-[11px] font-medium bg-sand px-2 py-0.5 rounded text-clay">
-                        {emp.rol || 'Empleado'}
+                        {formatRole(emp.rol)}
                       </span>
                       <p className="text-[10px] text-muted truncate max-w-[140px]">
                         Actual: <strong>{emp.sucursal || 'Sin sucursal'}</strong>

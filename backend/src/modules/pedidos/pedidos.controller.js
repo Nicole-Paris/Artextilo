@@ -20,6 +20,10 @@ export async function index(req, res) {
   const estado = typeof req.query.estado === 'string' ? req.query.estado : null;
   const estado_pago =
     typeof req.query.estado_pago === 'string' ? req.query.estado_pago : null;
+  const es_venta_directa =
+    req.query.es_venta_directa !== undefined && req.query.es_venta_directa !== ''
+      ? req.query.es_venta_directa
+      : null;
 
   const data = await listPedidos({
     search,
@@ -27,6 +31,7 @@ export async function index(req, res) {
     estado_pago,
     id_sucursal: req.query.id_sucursal || null,
     id_cliente: req.query.id_cliente || null,
+    es_venta_directa,
     limit: req.query.limit ? Number(req.query.limit) : 100,
     offset: req.query.offset ? Number(req.query.offset) : 0,
   });
@@ -80,6 +85,10 @@ export async function cancelar(req, res) {
 }
 
 export async function stats(req, res) {
-  const data = await getPedidoStats();
+  const es_venta_directa =
+    req.query.es_venta_directa !== undefined && req.query.es_venta_directa !== ''
+      ? req.query.es_venta_directa
+      : null;
+  const data = await getPedidoStats({ es_venta_directa });
   res.json({ data });
 }

@@ -41,12 +41,10 @@ export const productoPayloadSchema = z.object({
     .transform((value) => (value ? value : null)),
   costo_compra: z.coerce
     .number({ error: 'El costo de compra debe ser un número' })
-    .int('El costo de compra debe ser un número entero')
     .min(0, 'El costo de compra no puede ser negativo')
     .default(0),
   precio_unitario: z.coerce
     .number({ error: 'El precio unitario es obligatorio' })
-    .int('El precio unitario debe ser un número entero')
     .min(0, 'El precio unitario no puede ser negativo'),
   estado: z
     .enum(['activo', 'inactivo'], { error: 'El estado debe ser activo o inactivo' })

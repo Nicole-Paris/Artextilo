@@ -2,12 +2,14 @@ const BASE_URL = import.meta.env.VITE_API_URL ?? '/api';
 
 export async function request(path, options = {}) {
   let response;
+  const token = localStorage.getItem('artextilo_token');
 
   try {
     response = await fetch(`${BASE_URL}${path}`, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(options.headers ?? {}),
       },
     });
@@ -21,6 +23,15 @@ export async function request(path, options = {}) {
   const body = contentType.includes('application/json') ? await response.json() : null;
 
   if (!response.ok) {
+    // Si la sesión expiró o el token es inválido, limpiar sesión y redirigir al login
+    if (response.status === 401 && !path.includes('/auth/login')) {
+      localStorage.removeItem('artextilo_token');
+      localStorage.removeItem('artextilo_empleado');
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    }
+
     let errorMessage = body?.message || body?.error;
 
     if (!errorMessage) {

@@ -27,7 +27,6 @@ const optionalText = (max, message) =>
 export const pagoPayloadSchema = z.object({
   monto: z.coerce
     .number({ error: 'El monto es obligatorio' })
-    .int('El monto debe ser un número entero')
     .positive('El monto debe ser mayor a cero'),
   metodo_pago: z.enum(['efectivo', 'transferencia', 'tarjeta', 'credito'], {
     error: 'El método de pago debe ser efectivo, transferencia, tarjeta o crédito',
@@ -83,7 +82,6 @@ const servicioPayloadSchema = z.object({
     .default(1),
   precio: z.coerce
     .number()
-    .int('El precio del servicio debe ser un número entero')
     .min(0, 'El precio del servicio no puede ser negativo')
     .default(0),
   imagen: optionalText(500000, 'La imagen del servicio es demasiado grande'),
@@ -126,7 +124,6 @@ export const pedidoCreatePayloadSchema = z.object({
   ),
   costo_envio: z.coerce
     .number()
-    .int('El costo de envío debe ser un número entero')
     .min(0, 'El costo de envío no puede ser negativo')
     .default(0),
   fecha_entrega_prometida: optionalDateTime,
@@ -137,7 +134,6 @@ export const pedidoCreatePayloadSchema = z.object({
     .default('ninguno'),
   descuento_monto: z.coerce
     .number()
-    .int('El descuento debe ser un número entero')
     .min(0, 'El descuento no puede ser negativo')
     .default(0),
   descuento_motivo: optionalText(
@@ -198,7 +194,6 @@ export const pedidoCancelPayloadSchema = z.object({
     .nullable(),
   monto_devolucion: z.coerce
     .number()
-    .int('El monto de devolución debe ser un número entero')
     .min(0, 'El monto de devolución no puede ser negativo')
     .default(0),
   metodo_devolucion: z

@@ -54,6 +54,9 @@ export default function LoginPage() {
         throw new Error('No se recibieron los datos del empleado.');
       }
 
+      if (response.data.token) {
+        localStorage.setItem('artextilo_token', response.data.token);
+      }
       localStorage.setItem('artextilo_empleado', JSON.stringify(response.data));
 
       navigate('/', { replace: true });
@@ -68,19 +71,16 @@ export default function LoginPage() {
     <main className="min-h-screen w-full grid grid-cols-1 md:grid-cols-2 bg-white">
       {/* SECCIÓN IZQUIERDA: FONDO NEGRO CON TEXTO Y LOGOTIPO */}
       <section className="relative flex flex-col justify-between bg-black px-8 py-10 sm:px-12 md:py-16 lg:px-16 text-white min-h-[380px] md:min-h-screen">
-        {/* PARTE SUPERIOR: BIENVENIDO Y "ARTE QUE SE LLEVA CONTIGO" */}
-        <div className="space-y-2">
-          <p className="font-sans text-xs sm:text-sm font-bold tracking-[0.25em] text-[#AF9241] uppercase">
+        {/* PARTE SUPERIOR: BIENVENIDO */}
+        <div>
+          <h1 className="font-sans text-2xl sm:text-3xl lg:text-4xl font-bold tracking-[0.2em] text-[#AF9241] uppercase">
             Bienvenido
-          </p>
-          <h1 className="font-display text-lg sm:text-xl lg:text-2xl font-normal leading-snug text-white">
-            Arte que se lleva contigo
           </h1>
         </div>
 
         {/* PARTE CENTRAL: LOGOTIPO DE ARTEXTILO */}
         <div className="my-auto flex flex-col items-center justify-center py-6">
-          <div className="flex h-52 w-52 sm:h-64 sm:w-64 lg:h-72 lg:w-72 items-center justify-center">
+          <div className="flex h-56 w-56 sm:h-72 sm:w-72 lg:h-80 lg:w-80 items-center justify-center">
             <img
               src={logoUrl || '/logo-artextilo.jpeg'}
               alt="Artextilo"
@@ -93,10 +93,6 @@ export default function LoginPage() {
 
           {/* LÍNEA DIVISORIA DORADA */}
           <div className="mt-8 w-28 sm:w-36 border-t-2 border-[#AF9241]" />
-
-          <p className="mt-6 max-w-md text-center text-lg sm:text-xl lg:text-2xl leading-relaxed text-neutral-300 font-display">
-            Accede a tu cuenta y descubre piezas únicas elaboradas a mano por artesanas.
-          </p>
         </div>
 
         {/* PIE DE PÁGINA IZQUIERDO */}

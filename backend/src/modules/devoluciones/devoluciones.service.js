@@ -114,9 +114,10 @@ async function getTotalesPedido(connection, idPedido) {
 
 async function getEmpleadoActivoEnSucursal(connection, idEmpleado, idSucursal, rol) {
   const [rows] = await connection.execute(
-    `SELECT id_empleado, id_sucursal, estado
-     FROM empleado
-     WHERE id_empleado = ? AND deleted_at IS NULL
+    `SELECT e.id_empleado, e.id_sucursal, e.estado, r.nombre AS rol
+     FROM empleado e
+     INNER JOIN rol r ON r.id_rol = e.id_rol
+     WHERE e.id_empleado = ? AND e.deleted_at IS NULL
      LIMIT 1`,
     [idEmpleado],
   );
@@ -125,11 +126,17 @@ async function getEmpleadoActivoEnSucursal(connection, idEmpleado, idSucursal, r
     throw ApiError.badRequest(`El empleado que ${rol} debe existir y estar activo`);
   }
 
-  if (Number(rows[0].id_sucursal) !== Number(idSucursal)) {
+  const rolNombre = String(rows[0].rol || '').trim().toLowerCase();
+  const isAdminOrSupervisor = ['administrador', 'supervisor', 'gerente'].includes(rolNombre);
+
+  // Administradores, supervisores y gerentes tienen autorización transversal entre sucursales
+  if (!isAdminOrSupervisor && Number(rows[0].id_sucursal) !== Number(idSucursal)) {
     throw ApiError.badRequest(
       `El empleado que ${rol} debe pertenecer a la sucursal del pedido`,
     );
   }
+
+  return rows[0];
 }
 
 export async function listDevoluciones({ search, metodo, id_sucursal, desde, hasta }) {
@@ -209,7 +216,7 @@ export async function getResumenDevolucionPedido(idPedido) {
   };
 }
 
-export async function createDevolucion(payload) {
+export async function createDevolucion(payload, userId = null) {
   const connection = await pool.getConnection();
 
   try {
@@ -298,7 +305,7 @@ export async function createDevolucion(payload) {
         payload.monto,
         payload.metodo,
         payload.motivo,
-        payload.id_empleado_autoriza,
+        userId || payload.id_empleado_autoriza,
       ],
     );
 

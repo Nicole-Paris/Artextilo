@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requireAuth } from '../middlewares/authMiddleware.js';
 import cajaRoutes from '../modules/caja/caja.routes.js';
 import categoriasRoutes from '../modules/categorias/categorias.routes.js';
 import clientesRoutes from '../modules/clientes/clientes.routes.js';
@@ -15,22 +16,24 @@ import reportesRoutes from '../modules/reportes/reportes.routes.js';
 
 const router = Router();
 
+// Rutas públicas
 router.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
-
-router.use('/roles', rolesRoutes);
-router.use('/sucursales', sucursalesRoutes);
-router.use('/empleados', empleadosRoutes);
-router.use('/clientes', clientesRoutes);
-router.use('/devoluciones', devolucionesRoutes);
-router.use('/categorias', categoriasRoutes);
-router.use('/productos', productosRoutes);
-router.use('/inventario', inventarioRoutes);
-router.use('/caja', cajaRoutes);
-router.use('/pedidos', pedidosRoutes);
 router.use('/auth', authRoutes);
-router.use('/global-values', globalValuesRoutes);
-router.use('/reportes', reportesRoutes);
+
+// Rutas protegidas con autenticación obligatoria
+router.use('/roles', requireAuth, rolesRoutes);
+router.use('/sucursales', requireAuth, sucursalesRoutes);
+router.use('/empleados', requireAuth, empleadosRoutes);
+router.use('/clientes', requireAuth, clientesRoutes);
+router.use('/devoluciones', requireAuth, devolucionesRoutes);
+router.use('/categorias', requireAuth, categoriasRoutes);
+router.use('/productos', requireAuth, productosRoutes);
+router.use('/inventario', requireAuth, inventarioRoutes);
+router.use('/caja', requireAuth, cajaRoutes);
+router.use('/pedidos', requireAuth, pedidosRoutes);
+router.use('/global-values', requireAuth, globalValuesRoutes);
+router.use('/reportes', requireAuth, reportesRoutes);
 
 export default router;

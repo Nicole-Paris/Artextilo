@@ -16,8 +16,8 @@ export const pedidosApi = {
     return request(`/pedidos${buildQuery(filters)}`);
   },
 
-  stats() {
-    return request('/pedidos/stats');
+  stats(filters = {}) {
+    return request(`/pedidos/stats${buildQuery(filters)}`);
   },
 
   get(id) {

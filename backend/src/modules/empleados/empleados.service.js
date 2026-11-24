@@ -117,7 +117,7 @@ export async function getEmpleado(id, { includeArchived = false } = {}) {
   return rows[0];
 }
 
-export async function createEmpleado(payload) {
+export async function createEmpleado(payload, userId = null) {
   const {
     nombre,
     apellido_paterno,
@@ -138,8 +138,8 @@ export async function createEmpleado(payload) {
   const [result] = await pool.execute(
     `INSERT INTO empleado (
        nombre, apellido_paterno, apellido_materno, correo, telefono,
-       contrasena, horario_entrada, horario_salida, id_rol, id_sucursal, estado
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'activo')`,
+       contrasena, horario_entrada, horario_salida, id_rol, id_sucursal, estado, created_by
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'activo', ?)`,
     [
       nombre,
       apellido_paterno,
@@ -151,13 +151,14 @@ export async function createEmpleado(payload) {
       `${horario_salida}:00`,
       id_rol,
       idSucursalFinal,
+      userId || null,
     ],
   );
 
   return getEmpleado(result.insertId);
 }
 
-export async function updateEmpleado(id, payload) {
+export async function updateEmpleado(id, payload, userId = null) {
   const current = await getEmpleado(id);
   const {
     nombre,
@@ -212,11 +213,12 @@ export async function updateEmpleado(id, payload) {
     params.push(await bcrypt.hash(contrasena, 10));
   }
 
+  params.push(userId || null);
   params.push(id);
   await pool.execute(
     `UPDATE empleado
      SET nombre = ?, apellido_paterno = ?, apellido_materno = ?, correo = ?,
-         telefono = ?, id_rol = ?, id_sucursal = ?${scheduleUpdate}${passwordUpdate}
+         telefono = ?, id_rol = ?, id_sucursal = ?${scheduleUpdate}${passwordUpdate}, updated_by = ?
      WHERE id_empleado = ?`,
     params,
   );
@@ -224,34 +226,35 @@ export async function updateEmpleado(id, payload) {
   return getEmpleado(id);
 }
 
-export async function updateEstadoEmpleado(id, estado) {
+export async function updateEstadoEmpleado(id, estado, userId = null) {
   await getEmpleado(id);
-  await pool.execute('UPDATE empleado SET estado = ? WHERE id_empleado = ?', [estado, id]);
+  await pool.execute('UPDATE empleado SET estado = ?, updated_by = ? WHERE id_empleado = ?', [estado, userId || null, id]);
   return getEmpleado(id);
 }
 
-export async function updateSucursalEmpleado(id, id_sucursal) {
+export async function updateSucursalEmpleado(id, id_sucursal, userId = null) {
   await getEmpleado(id);
   const idSucursalFinal = await resolveSucursal(id_sucursal);
-  await pool.execute('UPDATE empleado SET id_sucursal = ? WHERE id_empleado = ?', [
+  await pool.execute('UPDATE empleado SET id_sucursal = ?, updated_by = ? WHERE id_empleado = ?', [
     idSucursalFinal,
+    userId || null,
     id,
   ]);
   return getEmpleado(id);
 }
 
-export async function archiveEmpleado(id) {
+export async function archiveEmpleado(id, userId = null) {
   await getEmpleado(id);
   await pool.execute(
     `UPDATE empleado
-     SET deleted_at = NOW(), estado = 'inactivo'
+     SET deleted_at = NOW(), deleted_by = ?, estado = 'inactivo'
      WHERE id_empleado = ?`,
-    [id],
+    [userId || null, id],
   );
   return { id_empleado: id };
 }
 
-export async function restoreEmpleado(id) {
+export async function restoreEmpleado(id, userId = null) {
   const empleado = await getEmpleado(id, { includeArchived: true });
 
   if (empleado.deleted_at === null) {
@@ -260,9 +263,9 @@ export async function restoreEmpleado(id) {
 
   await pool.execute(
     `UPDATE empleado
-     SET deleted_at = NULL, estado = 'activo'
+     SET deleted_at = NULL, deleted_by = NULL, updated_by = ?, estado = 'activo'
      WHERE id_empleado = ?`,
-    [id],
+    [userId || null, id],
   );
   return getEmpleado(id);
 }

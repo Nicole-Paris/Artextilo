@@ -27,21 +27,21 @@ export async function show(req, res) {
 
 export async function store(req, res) {
   const payload = clientePayloadSchema.parse(req.body);
-  const cliente = await createCliente(payload);
+  const cliente = await createCliente(payload, req.user?.id_empleado);
   res.status(201).json({ data: cliente, message: 'Cliente registrado correctamente' });
 }
 
 export async function update(req, res) {
   const id = clienteIdSchema.parse(req.params.id);
   const payload = clientePayloadSchema.parse(req.body);
-  const cliente = await updateCliente(id, payload);
+  const cliente = await updateCliente(id, payload, req.user?.id_empleado);
   res.json({ data: cliente, message: 'Cliente actualizado correctamente' });
 }
 
 export async function updateCredito(req, res) {
   const id = clienteIdSchema.parse(req.params.id);
   const payload = clienteCreditoPayloadSchema.parse(req.body);
-  const cliente = await setCreditoCliente(id, payload);
+  const cliente = await setCreditoCliente(id, payload, req.user?.id_empleado);
   const message = payload.tiene_credito
     ? 'Crédito asignado correctamente'
     : 'Crédito retirado correctamente';
@@ -50,6 +50,6 @@ export async function updateCredito(req, res) {
 
 export async function destroy(req, res) {
   const id = clienteIdSchema.parse(req.params.id);
-  const cliente = await deleteCliente(id);
+  const cliente = await deleteCliente(id, req.user?.id_empleado);
   res.json({ data: cliente, message: 'Cliente eliminado correctamente' });
 }

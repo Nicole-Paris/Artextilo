@@ -49,6 +49,44 @@ const ESTADOS_PAGO = [
   { value: 'liquidado', label: 'Liquidado' },
 ];
 
+function getEstadosPosibles(pedido) {
+  if (!pedido || ['cancelado', 'entregado'].includes(pedido.estado)) {
+    return [];
+  }
+
+  const totalPagado = Number(pedido.total_pagado || 0);
+  const anticipoRequerido = Number(pedido.anticipo_requerido || 0);
+  const saldoPendiente = Number(
+    pedido.saldo_pendiente ?? (Number(pedido.total || 0) - totalPagado),
+  );
+
+  const tieneAnticipo = totalPagado >= anticipoRequerido;
+  const estaLiquidado = saldoPendiente <= 0;
+
+  const posibles = [];
+
+  if (pedido.estado === 'pendiente') {
+    if (tieneAnticipo) {
+      posibles.push({ value: 'en_proceso', label: 'En proceso' });
+      posibles.push({ value: 'terminado', label: 'Terminado' });
+    }
+    if (estaLiquidado) {
+      posibles.push({ value: 'entregado', label: 'Entregado' });
+    }
+  } else if (pedido.estado === 'en_proceso') {
+    posibles.push({ value: 'terminado', label: 'Terminado' });
+    if (estaLiquidado) {
+      posibles.push({ value: 'entregado', label: 'Entregado' });
+    }
+  } else if (pedido.estado === 'terminado') {
+    if (estaLiquidado) {
+      posibles.push({ value: 'entregado', label: 'Entregado' });
+    }
+  }
+
+  return posibles;
+}
+
 const ORIGENES = [
   { value: 'presencial', label: 'Presencial' },
   { value: 'whatsapp', label: 'WhatsApp' },
@@ -98,9 +136,13 @@ function formatClienteOption(cliente) {
 
 function formatProductoOption(item) {
   const variants = [item.producto_color, item.producto_talla].filter(Boolean).join(' · ');
+  const stockInfo =
+    Number(item.stock_actual) > 0
+      ? `stock ${item.stock_actual}`
+      : 'sin stock (por encargo)';
   return variants
-    ? `${item.producto_nombre} · ${variants} · stock ${item.stock_actual}`
-    : `${item.producto_nombre} · stock ${item.stock_actual}`;
+    ? `${item.producto_nombre} · ${variants} · ${stockInfo}`
+    : `${item.producto_nombre} · ${stockInfo}`;
 }
 
 function estadoLabel(estado) {
@@ -370,9 +412,7 @@ export default function PedidosPage() {
   const productosDisponibles = useMemo(
     () =>
       inventario.filter(
-        (item) =>
-          Number(item.stock_actual) > 0 &&
-          (!item.producto_estado || item.producto_estado === 'activo'),
+        (item) => !item.producto_estado || item.producto_estado === 'activo',
       ),
     [inventario],
   );
@@ -411,14 +451,14 @@ export default function PedidosPage() {
     setError('');
 
     try {
-      const filters = {};
+      const filters = { es_venta_directa: 0 };
       if (debouncedSearch) filters.search = debouncedSearch;
       if (filtroEstado) filters.estado = filtroEstado;
       if (filtroPago) filters.estado_pago = filtroPago;
 
       const [pedidosRes, statsRes] = await Promise.all([
         pedidosApi.list(filters),
-        pedidosApi.stats(),
+        pedidosApi.stats({ es_venta_directa: 0 }),
       ]);
 
       setPedidos(pedidosRes.data || []);
@@ -542,7 +582,8 @@ export default function PedidosPage() {
       return undefined;
     }
 
-    const idEmpleadoCaja = pagoForm.id_empleado || pagoTarget.id_empleado;
+    const defaultId = resolveDefaultContext().idEmpleado || pagoTarget.id_empleado;
+    const idEmpleadoCaja = pagoForm.id_empleado || defaultId;
     if (!idEmpleadoCaja) {
       setPagoCaja(null);
       return undefined;
@@ -563,7 +604,7 @@ export default function PedidosPage() {
     return () => {
       active = false;
     };
-  }, [pagoTarget, pagoForm.id_empleado]);
+  }, [pagoTarget, pagoForm.id_empleado, resolveDefaultContext]);
 
   useEffect(() => {
     if (!success) return undefined;
@@ -1006,20 +1047,13 @@ export default function PedidosPage() {
     for (const [index, row] of totals.productosDetalle.entries()) {
       if (!row.item) {
         setCreateError(
-          `Escribe un producto válido con existencia en la fila ${index + 1}.`,
+          `Escribe o selecciona un producto válido en la fila ${index + 1}.`,
         );
         return;
       }
 
       if (Number(row.cantidad) <= 0) {
         setCreateError(`La cantidad del producto ${index + 1} debe ser mayor a cero.`);
-        return;
-      }
-
-      if (Number(row.cantidad) > Number(row.item.stock_actual)) {
-        setCreateError(
-          `Stock insuficiente para ${row.item.producto_nombre}. Disponible: ${row.item.stock_actual}.`,
-        );
         return;
       }
     }
@@ -1180,7 +1214,6 @@ export default function PedidosPage() {
       pagoForm.metodo_pago === 'transferencia' && !pagoForm.referencia.trim()
         ? 'La referencia es obligatoria para pagos por transferencia.'
         : '',
-    id_empleado: pagoForm.id_empleado ? '' : 'Selecciona un empleado.',
   };
   const montoPagoActual = Number(pagoForm.monto);
   const saldoPendientePago = Number(pagoTarget?.saldo_pendiente);
@@ -1202,11 +1235,12 @@ export default function PedidosPage() {
     setPagoTarget(pedido);
     setPagoCaja(null);
     const monto = String(pedido.saldo_pendiente || '');
+    const defaultEmpleadoId = resolveDefaultContext().idEmpleado || String(pedido.id_empleado);
     setPagoForm({
       monto,
       metodo_pago: 'efectivo',
       referencia: '',
-      id_empleado: String(pedido.id_empleado),
+      id_empleado: defaultEmpleadoId,
       concepto_pago: conceptoPagoPorDefecto(pedido, Number(monto)),
     });
     setPagoTouched({});
@@ -1218,7 +1252,7 @@ export default function PedidosPage() {
 
     const monto = Number(pagoForm.monto);
     if (Object.values(pagoFieldErrors).some(Boolean)) {
-      setPagoTouched({ monto: true, referencia: true, id_empleado: true });
+      setPagoTouched({ monto: true, referencia: true });
       return;
     }
 
@@ -1226,6 +1260,7 @@ export default function PedidosPage() {
       setSavingPago(true);
       setError('');
       setSuccess('');
+      const defaultEmpleadoId = resolveDefaultContext().idEmpleado || String(pagoTarget.id_empleado);
       await pedidosApi.addPago(pagoTarget.id_pedido, {
         monto,
         metodo_pago: pagoForm.metodo_pago,
@@ -1233,7 +1268,7 @@ export default function PedidosPage() {
           pagoForm.metodo_pago === 'transferencia'
             ? pagoForm.referencia.trim()
             : null,
-        id_empleado: Number(pagoForm.id_empleado || pagoTarget.id_empleado),
+        id_empleado: Number(pagoForm.id_empleado || defaultEmpleadoId),
         concepto_pago: pagoForm.concepto_pago,
       });
       setSuccess('Pago registrado correctamente.');
@@ -1248,16 +1283,11 @@ export default function PedidosPage() {
 
   function abrirEstado(pedido) {
     setError('');
-    const siguiente = {
-      pendiente: 'en_proceso',
-      en_proceso: 'terminado',
-      terminado: 'entregado',
-    }[pedido.estado];
-
+    const posibles = getEstadosPosibles(pedido);
     setEstadoTarget(pedido);
     setEstadoForm({
-      estado: siguiente || '',
-      id_empleado_entrega: String(pedido.id_empleado),
+      estado: posibles[0]?.value || '',
+      id_empleado_entrega: resolveDefaultContext().idEmpleado || String(pedido.id_empleado),
       observaciones: '',
     });
   }
@@ -1270,20 +1300,16 @@ export default function PedidosPage() {
       return;
     }
 
-    if (estadoForm.estado === 'entregado' && !estadoForm.id_empleado_entrega) {
-      setError('Selecciona el empleado que realiza la entrega.');
-      return;
-    }
-
     try {
       setSavingEstado(true);
       setError('');
       setSuccess('');
+      const defaultId = resolveDefaultContext().idEmpleado || String(estadoTarget.id_empleado);
       await pedidosApi.cambiarEstado(estadoTarget.id_pedido, {
         estado: estadoForm.estado,
         id_empleado_entrega:
           estadoForm.estado === 'entregado'
-            ? Number(estadoForm.id_empleado_entrega)
+            ? Number(estadoForm.id_empleado_entrega || defaultId)
             : null,
         observaciones: estadoForm.observaciones.trim() || null,
       });
@@ -1997,8 +2023,15 @@ export default function PedidosPage() {
                           Producto <span className="text-danger">*</span>
                         </label>
                         {row.item && (
-                          <span className="text-xs font-semibold text-forest">
-                            Stock: {row.item.stock_actual}
+                          <span
+                            className={cn(
+                              'text-xs font-semibold',
+                              Number(row.item.stock_actual) > 0 ? 'text-forest' : 'text-amber-600',
+                            )}
+                          >
+                            {Number(row.item.stock_actual) > 0
+                              ? `Stock: ${row.item.stock_actual}`
+                              : 'Sin stock (por encargo)'}
                           </span>
                         )}
                       </div>
@@ -2030,7 +2063,7 @@ export default function PedidosPage() {
                             {getProductosFiltrados(row.producto_texto).length > 0 ? (
                               getProductosFiltrados(row.producto_texto).map((item) => (
                                 <button
-                                  key={item.id_inventario}
+                                  key={item.id_inventario || item.id_producto}
                                   type="button"
                                   onClick={() => seleccionarProducto(index, item)}
                                   className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs hover:bg-sand transition"
@@ -2048,15 +2081,22 @@ export default function PedidosPage() {
                                     <span className="font-semibold text-ink block">
                                       {formatMoney(item.producto_precio)}
                                     </span>
-                                    <span className="text-[11px] text-forest">
-                                      {item.stock_actual} disp.
+                                    <span
+                                      className={cn(
+                                        'text-[11px] font-medium',
+                                        Number(item.stock_actual) > 0 ? 'text-forest' : 'text-amber-600',
+                                      )}
+                                    >
+                                      {Number(item.stock_actual) > 0
+                                        ? `${item.stock_actual} disp.`
+                                        : '0 disp. (por encargo)'}
                                     </span>
                                   </div>
                                 </button>
                               ))
                             ) : (
                               <div className="p-3 text-center text-xs text-muted">
-                                No se encontraron productos con existencia en esta sucursal.
+                                No se encontraron productos activos en esta sucursal.
                               </div>
                             )}
                           </div>
@@ -2075,7 +2115,6 @@ export default function PedidosPage() {
                         id={`cantidad-${index}`}
                         type="number"
                         min="1"
-                        max={row.item?.stock_actual || undefined}
                         step="1"
                         className={inputClass()}
                         value={row.cantidad}
@@ -2744,7 +2783,7 @@ export default function PedidosPage() {
 
             {!pagoCaja && (
               <Alert>
-                <p className="font-semibold">No hay caja abierta para este empleado.</p>
+                <p className="font-semibold">No tienes una caja abierta.</p>
                 <p className="mt-1">
                   Abre una caja en{' '}
                   <Link to="/caja" className="font-semibold underline">
@@ -2847,35 +2886,6 @@ export default function PedidosPage() {
                 <option value="liquidacion">Liquidación</option>
               </select>
             </Field>
-
-            <Field
-              label="Empleado que recibe"
-              htmlFor="pago-empleado"
-              error={visiblePagoFieldErrors.id_empleado}
-            >
-              <select
-                id="pago-empleado"
-                className={inputClass(visiblePagoFieldErrors.id_empleado)}
-                value={pagoForm.id_empleado}
-                onChange={(event) => {
-                  setPagoCaja(null);
-                  setPagoForm((current) => ({
-                    ...current,
-                    id_empleado: event.target.value,
-                  }));
-                }}
-                onBlur={() =>
-                  setPagoTouched((current) => ({ ...current, id_empleado: true }))
-                }
-              >
-                <option value="">Selecciona un empleado</option>
-                {empleados.map((empleado) => (
-                  <option key={empleado.id_empleado} value={empleado.id_empleado}>
-                    {empleado.nombre} {empleado.apellido_paterno}
-                  </option>
-                ))}
-              </select>
-            </Field>
           </form>
         )}
       </Modal>
@@ -2884,7 +2894,7 @@ export default function PedidosPage() {
         open={Boolean(estadoTarget)}
         onClose={() => !savingEstado && setEstadoTarget(null)}
         title={`Cambiar estado · ${estadoTarget?.folio ?? ''}`}
-        description="El flujo permitido es pendiente → en proceso → terminado → entregado."
+        description="Selecciona el siguiente estado disponible para este pedido."
         size="sm"
         footer={
           <>
@@ -2895,91 +2905,101 @@ export default function PedidosPage() {
             >
               Cancelar
             </Button>
-            <Button type="submit" form="form-estado-pedido" loading={savingEstado}>
+            <Button
+              type="submit"
+              form="form-estado-pedido"
+              loading={savingEstado}
+              disabled={!estadoTarget || getEstadosPosibles(estadoTarget).length === 0 || !estadoForm.estado}
+            >
               Guardar estado
             </Button>
           </>
         }
       >
-        {estadoTarget && (
-          <form id="form-estado-pedido" className="space-y-4" onSubmit={handleCambiarEstado}>
-            {error && <Alert>{error}</Alert>}
+        {estadoTarget && (() => {
+          const posibles = getEstadosPosibles(estadoTarget);
+          const totalPagado = Number(estadoTarget.total_pagado || 0);
+          const anticipoRequerido = Number(estadoTarget.anticipo_requerido || 0);
+          const saldoPendiente = Number(
+            estadoTarget.saldo_pendiente ?? (Number(estadoTarget.total || 0) - totalPagado),
+          );
+          const faltaAnticipo = totalPagado < anticipoRequerido;
 
-            <div className="rounded-xl bg-sand/70 p-4 text-sm">
-              <p className="text-muted">Estado actual</p>
-              <div className="mt-2">
-                <EstadoBadge estado={estadoTarget.estado} />
+          return (
+            <form id="form-estado-pedido" className="space-y-4" onSubmit={handleCambiarEstado}>
+              {error && <Alert>{error}</Alert>}
+
+              <div className="rounded-xl bg-sand/70 p-4 text-sm space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted">Estado actual:</span>
+                  <EstadoBadge estado={estadoTarget.estado} />
+                </div>
+                <div className="flex items-center justify-between text-xs text-muted pt-1 border-t border-line/60">
+                  <span>Total: <strong>{formatMoney(estadoTarget.total)}</strong></span>
+                  <span>Pagado: <strong className="text-forest">{formatMoney(totalPagado)}</strong></span>
+                  <span>Saldo: <strong className={saldoPendiente > 0 ? 'text-danger' : 'text-forest'}>{formatMoney(saldoPendiente)}</strong></span>
+                </div>
               </div>
-            </div>
 
-            <Field label="Siguiente estado" htmlFor="estado-pedido">
-              <select
-                id="estado-pedido"
-                className={inputClass()}
-                value={estadoForm.estado}
-                onChange={(event) =>
-                  setEstadoForm((current) => ({
-                    ...current,
-                    estado: event.target.value,
-                  }))
-                }
-                required
-              >
-                <option value="">Selecciona el siguiente estado</option>
-                {estadoTarget.estado === 'pendiente' && (
-                  <option value="en_proceso">En proceso</option>
-                )}
-                {estadoTarget.estado === 'en_proceso' && (
-                  <option value="terminado">Terminado</option>
-                )}
-                {estadoTarget.estado === 'terminado' && (
-                  <option value="entregado">Entregado</option>
-                )}
-              </select>
-            </Field>
+              {posibles.length === 0 ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 space-y-2">
+                  <p className="font-semibold">
+                    No hay cambios de estado disponibles en este momento.
+                  </p>
+                  {estadoTarget.estado === 'pendiente' && faltaAnticipo && (
+                    <p className="text-xs text-amber-800">
+                      Este pedido requiere cubrir el anticipo mínimo de <strong>{formatMoney(anticipoRequerido)}</strong> para pasar a elaboración (pagado: {formatMoney(totalPagado)}). Registra un abono primero.
+                    </p>
+                  )}
+                  {saldoPendiente > 0 && (
+                    <p className="text-xs text-amber-800">
+                      Para marcarse como entregado, el pedido debe estar completamente liquidado. Saldo pendiente: <strong>{formatMoney(saldoPendiente)}</strong>.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <Field label="Siguiente estado" htmlFor="estado-pedido">
+                  <select
+                    id="estado-pedido"
+                    className={inputClass()}
+                    value={estadoForm.estado}
+                    onChange={(event) =>
+                      setEstadoForm((current) => ({
+                        ...current,
+                        estado: event.target.value,
+                      }))
+                    }
+                    required
+                  >
+                    <option value="">Selecciona el siguiente estado</option>
+                    {posibles.map((opcion) => (
+                      <option key={opcion.value} value={opcion.value}>
+                        {opcion.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              )}
 
-            {estadoForm.estado === 'entregado' && (
-              <Field label="Empleado que entrega" htmlFor="estado-empleado-entrega">
-                <select
-                  id="estado-empleado-entrega"
+              <Field label="Observaciones" htmlFor="estado-observaciones">
+                <textarea
+                  id="estado-observaciones"
+                  rows="3"
+                  maxLength={1000}
                   className={inputClass()}
-                  value={estadoForm.id_empleado_entrega}
+                  value={estadoForm.observaciones}
                   onChange={(event) =>
                     setEstadoForm((current) => ({
                       ...current,
-                      id_empleado_entrega: event.target.value,
+                      observaciones: event.target.value,
                     }))
                   }
-                  required
-                >
-                  <option value="">Selecciona un empleado</option>
-                  {empleados.map((empleado) => (
-                    <option key={empleado.id_empleado} value={empleado.id_empleado}>
-                      {empleado.nombre} {empleado.apellido_paterno}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Notas del cambio de estado"
+                />
               </Field>
-            )}
-
-            <Field label="Observaciones" htmlFor="estado-observaciones">
-              <textarea
-                id="estado-observaciones"
-                rows="3"
-                maxLength={1000}
-                className={inputClass()}
-                value={estadoForm.observaciones}
-                onChange={(event) =>
-                  setEstadoForm((current) => ({
-                    ...current,
-                    observaciones: event.target.value,
-                  }))
-                }
-                placeholder="Notas del cambio de estado"
-              />
-            </Field>
-          </form>
-        )}
+            </form>
+          );
+        })()}
       </Modal>
 
       <Modal

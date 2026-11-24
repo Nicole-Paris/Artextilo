@@ -62,7 +62,7 @@ export async function getSucursalDependencies(id) {
   return countSucursalDependencies(id);
 }
 
-export async function createSucursal(payload) {
+export async function createSucursal(payload, userId = null) {
   const {
     nombre,
     direccion,
@@ -88,8 +88,8 @@ export async function createSucursal(payload) {
     await connection.beginTransaction();
 
     const [result] = await connection.execute(
-      `INSERT INTO sucursal (nombre, direccion, ciudad, estado_republica, codigo_postal, telefono, horario)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO sucursal (nombre, direccion, ciudad, estado_republica, codigo_postal, telefono, horario, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         nombre,
         direccion,
@@ -98,6 +98,7 @@ export async function createSucursal(payload) {
         codigo_postal,
         telefono,
         horario,
+        userId || null,
       ],
     );
 
@@ -107,19 +108,19 @@ export async function createSucursal(payload) {
       // Asignar los empleados seleccionados a esta nueva sucursal
       for (const idEmpleado of empleados_ids) {
         await connection.execute(
-          `UPDATE empleado SET id_sucursal = ?, updated_at = NOW() WHERE id_empleado = ? AND deleted_at IS NULL`,
-          [idSucursal, idEmpleado],
+          `UPDATE empleado SET id_sucursal = ?, updated_at = NOW(), updated_by = ? WHERE id_empleado = ? AND deleted_at IS NULL`,
+          [idSucursal, userId || null, idEmpleado],
         );
       }
     }
 
     // Inicializar automáticamente el inventario de esta nueva sucursal con todos los productos activos
     await connection.execute(
-      `INSERT INTO inventario (id_producto, id_sucursal, stock_actual, stock_minimo)
-       SELECT p.id_producto, ?, 0, 5
+      `INSERT INTO inventario (id_producto, id_sucursal, stock_actual, stock_minimo, created_by)
+       SELECT p.id_producto, ?, 0, 5, ?
        FROM producto p
        WHERE p.deleted_at IS NULL AND p.estado = 'activo'`,
-      [idSucursal],
+      [idSucursal, userId || null],
     );
 
     await connection.commit();
@@ -132,7 +133,7 @@ export async function createSucursal(payload) {
   }
 }
 
-export async function updateSucursal(id, payload) {
+export async function updateSucursal(id, payload, userId = null) {
   const {
     nombre,
     direccion,
@@ -159,7 +160,7 @@ export async function updateSucursal(id, payload) {
 
   await pool.execute(
     `UPDATE sucursal
-     SET nombre = ?, direccion = ?, ciudad = ?, estado_republica = ?, codigo_postal = ?, telefono = ?, horario = ?
+     SET nombre = ?, direccion = ?, ciudad = ?, estado_republica = ?, codigo_postal = ?, telefono = ?, horario = ?, updated_by = ?
      WHERE id_sucursal = ?`,
     [
       nombre,
@@ -169,6 +170,7 @@ export async function updateSucursal(id, payload) {
       codigo_postal,
       telefono,
       horario,
+      userId || null,
       id,
     ],
   );
@@ -176,7 +178,7 @@ export async function updateSucursal(id, payload) {
   return getSucursal(id);
 }
 
-export async function archiveSucursal(id) {
+export async function archiveSucursal(id, userId = null) {
   await getSucursal(id);
   const dependencies = await countSucursalDependencies(id);
 
@@ -194,11 +196,11 @@ export async function archiveSucursal(id) {
     );
   }
 
-  await pool.execute('UPDATE sucursal SET deleted_at = NOW() WHERE id_sucursal = ?', [id]);
+  await pool.execute('UPDATE sucursal SET deleted_at = NOW(), deleted_by = ? WHERE id_sucursal = ?', [userId || null, id]);
   return { id_sucursal: id };
 }
 
-export async function restoreSucursal(id) {
+export async function restoreSucursal(id, userId = null) {
   const sucursal = await getSucursal(id, { includeArchived: true });
 
   if (sucursal.deleted_at === null) {
@@ -216,6 +218,6 @@ export async function restoreSucursal(id) {
     );
   }
 
-  await pool.execute('UPDATE sucursal SET deleted_at = NULL WHERE id_sucursal = ?', [id]);
+  await pool.execute('UPDATE sucursal SET deleted_at = NULL, deleted_by = NULL, updated_by = ? WHERE id_sucursal = ?', [userId || null, id]);
   return getSucursal(id);
 }

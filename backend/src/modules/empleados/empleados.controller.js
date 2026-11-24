@@ -30,33 +30,33 @@ export async function show(req, res) {
 
 export async function store(req, res) {
   const payload = empleadoCreatePayloadSchema.parse(req.body);
-  const empleado = await createEmpleado(payload);
+  const empleado = await createEmpleado(payload, req.user?.id_empleado);
   res.status(201).json({ data: empleado, message: 'Empleado registrado correctamente' });
 }
 
 export async function update(req, res) {
   const id = empleadoIdSchema.parse(req.params.id);
   const payload = empleadoPayloadSchema.parse(req.body);
-  const empleado = await updateEmpleado(id, payload);
+  const empleado = await updateEmpleado(id, payload, req.user?.id_empleado);
   res.json({ data: empleado, message: 'Empleado actualizado correctamente' });
 }
 
 export async function destroy(req, res) {
   const id = empleadoIdSchema.parse(req.params.id);
-  await archiveEmpleado(id);
+  await archiveEmpleado(id, req.user?.id_empleado);
   res.json({ message: 'Empleado archivado correctamente' });
 }
 
 export async function restore(req, res) {
   const id = empleadoIdSchema.parse(req.params.id);
-  const empleado = await restoreEmpleado(id);
+  const empleado = await restoreEmpleado(id, req.user?.id_empleado);
   res.json({ data: empleado, message: 'Empleado restaurado correctamente' });
 }
 
 export async function updateEstado(req, res) {
   const id = empleadoIdSchema.parse(req.params.id);
   const { estado } = empleadoEstadoSchema.parse(req.body);
-  const empleado = await updateEstadoEmpleado(id, estado);
+  const empleado = await updateEstadoEmpleado(id, estado, req.user?.id_empleado);
   const message = estado === 'activo'
     ? 'Empleado activado correctamente'
     : 'Empleado desactivado correctamente';
@@ -66,6 +66,6 @@ export async function updateEstado(req, res) {
 export async function updateSucursal(req, res) {
   const id = empleadoIdSchema.parse(req.params.id);
   const { id_sucursal } = empleadoSucursalSchema.parse(req.body);
-  const empleado = await updateSucursalEmpleado(id, id_sucursal);
+  const empleado = await updateSucursalEmpleado(id, id_sucursal, req.user?.id_empleado);
   res.json({ data: empleado, message: 'Sucursal de empleado actualizada correctamente' });
 }

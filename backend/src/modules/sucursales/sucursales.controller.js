@@ -30,25 +30,25 @@ export async function dependencies(req, res) {
 
 export async function store(req, res) {
   const payload = sucursalPayloadSchema.parse(req.body);
-  const sucursal = await createSucursal(payload);
+  const sucursal = await createSucursal(payload, req.user?.id_empleado);
   res.status(201).json({ data: sucursal, message: 'Sucursal creada correctamente' });
 }
 
 export async function update(req, res) {
   const id = sucursalIdSchema.parse(req.params.id);
   const payload = sucursalPayloadSchema.parse(req.body);
-  const sucursal = await updateSucursal(id, payload);
+  const sucursal = await updateSucursal(id, payload, req.user?.id_empleado);
   res.json({ data: sucursal, message: 'Sucursal actualizada correctamente' });
 }
 
 export async function destroy(req, res) {
   const id = sucursalIdSchema.parse(req.params.id);
-  await archiveSucursal(id);
+  await archiveSucursal(id, req.user?.id_empleado);
   res.json({ message: 'Sucursal archivada correctamente' });
 }
 
 export async function restore(req, res) {
   const id = sucursalIdSchema.parse(req.params.id);
-  const sucursal = await restoreSucursal(id);
+  const sucursal = await restoreSucursal(id, req.user?.id_empleado);
   res.json({ data: sucursal, message: 'Sucursal restaurada correctamente' });
 }

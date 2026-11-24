@@ -2,13 +2,15 @@ import bcrypt from 'bcryptjs';
 import { pool } from '../../config/db.js';
 import { ApiError } from '../../lib/ApiError.js';
 import { sendRecoveryCodeEmail } from '../../lib/mailer.js';
+import { generateToken } from '../../middlewares/authMiddleware.js';
 
 export async function loginEmpleado({ correo, contrasena }) {
   const [empleados] = await pool.execute(
     `SELECT e.id_empleado, e.nombre, e.apellido_paterno,
             e.apellido_materno, e.correo, e.contrasena,
             e.estado, e.id_rol, r.nombre AS rol,
-            e.id_sucursal, s.nombre AS sucursal
+            e.id_sucursal, s.nombre AS sucursal,
+            e.intentos_fallidos, e.bloqueado_hasta
      FROM empleado e
      INNER JOIN rol r ON r.id_rol = e.id_rol
      INNER JOIN sucursal s ON s.id_sucursal = e.id_sucursal
@@ -28,22 +30,73 @@ export async function loginEmpleado({ correo, contrasena }) {
     throw ApiError.unauthorized('El empleado se encuentra inactivo');
   }
 
+  // Verificar si la cuenta se encuentra bloqueada temporalmente
+  if (empleado.bloqueado_hasta && new Date(empleado.bloqueado_hasta) > new Date()) {
+    const minutosRestantes = Math.ceil(
+      (new Date(empleado.bloqueado_hasta).getTime() - Date.now()) / 60000,
+    );
+    throw ApiError.forbidden(
+      `Cuenta bloqueada temporalmente por seguridad debido a múltiples intentos fallidos. Intenta nuevamente en ${minutosRestantes} minuto(s).`,
+    );
+  }
+
   const passwordCorrecta = await bcrypt.compare(
     contrasena,
     empleado.contrasena,
   );
 
   if (!passwordCorrecta) {
-    throw ApiError.unauthorized('Correo o contraseña incorrectos');
+    const nuevosIntentos = Number(empleado.intentos_fallidos || 0) + 1;
+    let bloqueadoHasta = null;
+    let mensaje = 'Correo o contraseña incorrectos';
+
+    if (nuevosIntentos >= 5) {
+      bloqueadoHasta = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
+      mensaje = 'Has alcanzado 5 intentos fallidos. Por seguridad, tu cuenta ha sido bloqueada temporalmente por 15 minutos.';
+    } else {
+      mensaje = `Correo o contraseña incorrectos. Intentos restantes antes del bloqueo: ${5 - nuevosIntentos}.`;
+    }
+
+    await pool.execute(
+      `UPDATE empleado SET intentos_fallidos = ?, bloqueado_hasta = ? WHERE id_empleado = ?`,
+      [nuevosIntentos, bloqueadoHasta, empleado.id_empleado],
+    );
+
+    throw ApiError.unauthorized(mensaje);
   }
 
-  const { contrasena: password, ...datosEmpleado } = empleado;
+  // Si el login fue exitoso y tenía intentos fallidos o bloqueo, reiniciar
+  if (Number(empleado.intentos_fallidos || 0) > 0 || empleado.bloqueado_hasta) {
+    await pool.execute(
+      `UPDATE empleado SET intentos_fallidos = 0, bloqueado_hasta = NULL WHERE id_empleado = ?`,
+      [empleado.id_empleado],
+    );
+  }
 
-  // Obtener las sucursales asignadas al empleado (o todas las activas si es administrador)
+  const {
+    contrasena: password,
+    intentos_fallidos: _if,
+    bloqueado_hasta: _bh,
+    ...datosEmpleado
+  } = empleado;
+
+  // Generar token JWT firmado
+  const token = generateToken({
+    id_empleado: empleado.id_empleado,
+    correo: empleado.correo,
+    nombre: `${empleado.nombre} ${empleado.apellido_paterno}`.trim(),
+    id_rol: empleado.id_rol,
+    rol: empleado.rol,
+    id_sucursal: empleado.id_sucursal,
+  });
+
+  // Obtener las sucursales asignadas al empleado (o todas las activas si es administrador o supervisor)
   let sucursalesAsignadas = [];
-  const esAdmin = ['administrador', 'admin'].includes(String(empleado.rol || '').trim().toLowerCase());
+  const tieneAccesoTodas = ['administrador', 'admin', 'supervisor'].includes(
+    String(empleado.rol || '').trim().toLowerCase()
+  );
 
-  if (esAdmin) {
+  if (tieneAccesoTodas) {
     const [todasSucursales] = await pool.execute(
       `SELECT id_sucursal, nombre FROM sucursal WHERE deleted_at IS NULL AND estado = 'activa' ORDER BY nombre ASC`
     );
@@ -72,6 +125,7 @@ export async function loginEmpleado({ correo, contrasena }) {
   }
 
   datosEmpleado.sucursales = sucursalesAsignadas;
+  datosEmpleado.token = token;
 
   return datosEmpleado;
 }
@@ -137,13 +191,16 @@ export async function solicitarRecuperacion({ correo }) {
     expiraMinutos: minutosVigencia,
   });
 
+  if (resultadoEnvio.devMode) {
+    console.log(`\n========================================`);
+    console.log(`[SEGURIDAD DEV] Código para ${empleado.correo}: [ ${codigo} ]`);
+    console.log(`========================================\n`);
+  }
+
   return {
     correo: empleado.correo,
     expiraEnMinutos: minutosVigencia,
-    devMode: resultadoEnvio.devMode,
-    message: resultadoEnvio.devMode
-      ? `Código generado exitosamente. Como aún no se han configurado credenciales SMTP de Gmail en el archivo .env, el código se ha mostrado en la consola del servidor: [ ${codigo} ]`
-      : 'Código de recuperación enviado con éxito a tu correo electrónico.',
+    message: 'Se ha enviado un código de recuperación a tu correo electrónico.',
   };
 }
 

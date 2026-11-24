@@ -214,6 +214,7 @@ export default function Layout() {
         }
       }
     } catch {
+      localStorage.removeItem('artextilo_token');
       localStorage.removeItem('artextilo_empleado');
       setEmpleado(null);
       navigate('/login', { replace: true });
@@ -238,6 +239,7 @@ export default function Layout() {
   }
 
   function handleLogout() {
+    localStorage.removeItem('artextilo_token');
     localStorage.removeItem('artextilo_empleado');
     setEmpleado(null);
 
@@ -386,12 +388,12 @@ export default function Layout() {
         Saltar al contenido
       </a>
 
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col bg-forest lg:flex">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col bg-forest lg:flex print:hidden">
         <SidebarContent logoUrl={logoUrl} />
       </aside>
 
       {sidebarOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div className="fixed inset-0 z-50 lg:hidden print:hidden">
           <div
             className="absolute inset-0 bg-forest-strong/60 backdrop-blur-sm"
             onClick={() => setSidebarOpen(false)}
@@ -425,8 +427,8 @@ export default function Layout() {
         </div>
       )}
 
-      <div className="lg:pl-64" data-app-shell>
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-line bg-paper/90 px-4 backdrop-blur lg:px-8">
+      <div className="lg:pl-64 print:pl-0" data-app-shell>
+        <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-line bg-paper/90 px-4 backdrop-blur lg:px-8 print:hidden">
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
@@ -547,7 +549,7 @@ export default function Layout() {
 
         <main
           id="main-content"
-          className="mx-auto w-full max-w-[1500px] px-4 py-6 lg:px-8 lg:py-8"
+          className="mx-auto w-full max-w-[1500px] px-4 py-6 lg:px-8 lg:py-8 print:p-0 print:max-w-none"
         >
           <Outlet />
         </main>

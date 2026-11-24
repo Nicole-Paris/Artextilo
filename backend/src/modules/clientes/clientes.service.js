@@ -70,7 +70,7 @@ export async function getCliente(id) {
   return normalizeCliente(rows[0]);
 }
 
-export async function createCliente(payload) {
+export async function createCliente(payload, userId = null) {
   const {
     nombre,
     apellido_paterno,
@@ -95,8 +95,8 @@ export async function createCliente(payload) {
     const existingClient = existing[0];
     if (es_frecuente && !existingClient.es_frecuente) {
       await pool.execute(
-        `UPDATE cliente SET es_frecuente = 1 WHERE id_cliente = ?`,
-        [existingClient.id_cliente],
+        `UPDATE cliente SET es_frecuente = 1, updated_by = ? WHERE id_cliente = ?`,
+        [userId || null, existingClient.id_cliente],
       );
     }
     return getCliente(existingClient.id_cliente);
@@ -105,8 +105,8 @@ export async function createCliente(payload) {
   const [result] = await pool.execute(
     `INSERT INTO cliente (
        nombre, apellido_paterno, apellido_materno, telefono, correo, direccion,
-       ciudad, estado_republica, codigo_postal, es_frecuente, tiene_credito, limite_credito
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ciudad, estado_republica, codigo_postal, es_frecuente, tiene_credito, limite_credito, created_by
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       nombre,
       apellido_paterno,
@@ -120,13 +120,14 @@ export async function createCliente(payload) {
       es_frecuente ? 1 : 0,
       tiene_credito ? 1 : 0,
       tiene_credito ? limite_credito : 0,
+      userId || null,
     ],
   );
 
   return getCliente(result.insertId);
 }
 
-export async function updateCliente(id, payload) {
+export async function updateCliente(id, payload, userId = null) {
   const current = await getCliente(id);
   const {
     nombre,
@@ -164,7 +165,7 @@ export async function updateCliente(id, payload) {
 
     if (
       tieneCreditoFinal &&
-      (!Number.isInteger(limiteCreditoFinal) ||
+      (!Number.isFinite(limiteCreditoFinal) ||
         limiteCreditoFinal <= 0 ||
         limiteCreditoFinal > 99999999)
     ) {
@@ -184,12 +185,13 @@ export async function updateCliente(id, payload) {
     params.push(es_frecuente ? 1 : 0);
   }
 
+  params.push(userId || null);
   params.push(id);
 
   await pool.execute(
     `UPDATE cliente
      SET nombre = ?, apellido_paterno = ?, apellido_materno = COALESCE(?, ''), telefono = ?,
-         correo = ?, direccion = ?, ciudad = ?, estado_republica = ?, codigo_postal = ?${creditUpdate}${frecuenteUpdate}
+         correo = ?, direccion = ?, ciudad = ?, estado_republica = ?, codigo_postal = ?${creditUpdate}${frecuenteUpdate}, updated_by = ?
      WHERE id_cliente = ? AND deleted_at IS NULL`,
     params,
   );
@@ -197,23 +199,23 @@ export async function updateCliente(id, payload) {
   return getCliente(id);
 }
 
-export async function setCreditoCliente(id, { tiene_credito, limite_credito }) {
+export async function setCreditoCliente(id, { tiene_credito, limite_credito }, userId = null) {
   await getCliente(id);
   await pool.execute(
     `UPDATE cliente
-     SET tiene_credito = ?, limite_credito = ?
+     SET tiene_credito = ?, limite_credito = ?, updated_by = ?
      WHERE id_cliente = ? AND deleted_at IS NULL`,
-    [tiene_credito ? 1 : 0, tiene_credito ? limite_credito : 0, id],
+    [tiene_credito ? 1 : 0, tiene_credito ? limite_credito : 0, userId || null, id],
   );
 
   return getCliente(id);
 }
 
-export async function deleteCliente(id) {
+export async function deleteCliente(id, userId = null) {
   await getCliente(id);
   await pool.execute(
-    'UPDATE cliente SET deleted_at = NOW() WHERE id_cliente = ? AND deleted_at IS NULL',
-    [id],
+    'UPDATE cliente SET deleted_at = NOW(), deleted_by = ? WHERE id_cliente = ? AND deleted_at IS NULL',
+    [userId || null, id],
   );
 
   return { id_cliente: id };

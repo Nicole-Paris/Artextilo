@@ -59,7 +59,8 @@ export async function cambiarPassword(req, res) {
 
 export async function modificarPerfil(req, res) {
   const payload = updatePerfilSchema.parse(req.body);
-  const resultado = await actualizarPerfil(payload);
+  const idEmpleadoAuth = req.user?.id_empleado || payload.id_empleado;
+  const resultado = await actualizarPerfil({ ...payload, id_empleado: idEmpleadoAuth });
 
   res.json({
     success: true,

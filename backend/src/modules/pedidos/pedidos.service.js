@@ -7,6 +7,7 @@ const BASE_PEDIDO_SELECT = `
     p.id_cliente,
     p.id_empleado,
     p.id_sucursal,
+    p.es_venta_directa,
     p.fecha_pedido,
     p.fecha_entrega_prometida,
     p.fecha_entrega_real,
@@ -208,7 +209,7 @@ async function getGlobalNumber(connection, nombre, fallback) {
   return Number.isFinite(value) ? value : fallback;
 }
 
-async function findOpenCorteId(connection, id_empleado) {
+async function findOpenCorteId(connection, id_empleado, id_sucursal = null) {
   const [rows] = await connection.execute(
     `SELECT id_corte_caja
      FROM corte_caja
@@ -218,15 +219,29 @@ async function findOpenCorteId(connection, id_empleado) {
     [id_empleado],
   );
 
-  return rows[0]?.id_corte_caja ?? null;
+  if (rows.length > 0) return rows[0].id_corte_caja;
+
+  if (id_sucursal) {
+    const [sucursalRows] = await connection.execute(
+      `SELECT id_corte_caja
+       FROM corte_caja
+       WHERE id_sucursal = ? AND estado = 'abierto' AND deleted_at IS NULL
+       ORDER BY fecha_apertura DESC
+       LIMIT 1`,
+      [id_sucursal],
+    );
+    if (sucursalRows.length > 0) return sucursalRows[0].id_corte_caja;
+  }
+
+  return null;
 }
 
-async function getOpenCorteId(connection, id_empleado) {
-  const idCorteCaja = await findOpenCorteId(connection, id_empleado);
+async function getOpenCorteId(connection, id_empleado, id_sucursal = null) {
+  const idCorteCaja = await findOpenCorteId(connection, id_empleado, id_sucursal);
 
   if (!idCorteCaja) {
     throw ApiError.conflict(
-      'El empleado no tiene una caja abierta. Abre una caja antes de registrar el pago.',
+      'No hay una caja abierta para registrar el pago en esta sucursal. Abre una caja antes de registrar el pago.',
     );
   }
 
@@ -265,10 +280,8 @@ async function getSaldoCreditoCliente(connection, id_cliente) {
 }
 
 async function validarProductoParaPedido(connection, id_producto, cantidad, id_sucursal) {
-  const [rows] = await connection.execute(
+  const [productoRows] = await connection.execute(
     `SELECT
-       i.id_inventario,
-       i.stock_actual,
        p.id_producto,
        p.nombre,
        p.sku,
@@ -276,47 +289,62 @@ async function validarProductoParaPedido(connection, id_producto, cantidad, id_s
        p.talla,
        p.precio_unitario,
        p.estado
+     FROM producto p
+     WHERE p.id_producto = ?
+       AND p.deleted_at IS NULL
+     LIMIT 1`,
+    [id_producto],
+  );
+
+  if (productoRows.length === 0) {
+    throw ApiError.badRequest('El producto seleccionado no existe o fue eliminado');
+  }
+
+  const producto = productoRows[0];
+  if (producto.estado !== 'activo') {
+    throw ApiError.badRequest(`El producto ${producto.nombre} está inactivo`);
+  }
+
+  // Buscar si existe en inventario en la sucursal seleccionada
+  const [invRows] = await connection.execute(
+    `SELECT
+       i.id_inventario,
+       i.stock_actual
      FROM inventario i
-     INNER JOIN producto p ON p.id_producto = i.id_producto
      WHERE i.id_producto = ?
        AND i.id_sucursal = ?
        AND i.deleted_at IS NULL
-       AND p.deleted_at IS NULL
      LIMIT 1
      FOR UPDATE`,
     [id_producto, id_sucursal],
   );
 
-  if (rows.length === 0) {
-    throw ApiError.badRequest(
-      'El producto no tiene inventario asignado en la sucursal seleccionada',
-    );
+  let idInventario = null;
+  let stockActual = 0;
+  let cantidadADescontar = 0;
+
+  if (invRows.length > 0) {
+    idInventario = invRows[0].id_inventario;
+    stockActual = Number(invRows[0].stock_actual);
+    // Si la prenda está en inventario con stock disponible, descontamos hasta lo disponible
+    if (stockActual > 0) {
+      cantidadADescontar = Math.min(stockActual, cantidad);
+    }
   }
 
-  const inventario = rows[0];
-  if (inventario.estado !== 'activo') {
-    throw ApiError.badRequest(`El producto ${inventario.nombre} está inactivo`);
-  }
-
-  const stock = Number(inventario.stock_actual);
-  if (stock < cantidad) {
-    throw ApiError.badRequest(
-      `Stock insuficiente para ${inventario.nombre}. Disponible: ${stock}, solicitado: ${cantidad}`,
-    );
-  }
-
-  const precioUnitario = Number(inventario.precio_unitario);
+  const precioUnitario = Number(producto.precio_unitario);
   return {
-    id_inventario: inventario.id_inventario,
-    id_producto: inventario.id_producto,
+    id_inventario: idInventario,
+    cantidad_a_descontar: cantidadADescontar,
+    id_producto: producto.id_producto,
     cantidad,
     precio_unitario: precioUnitario,
     subtotal: precioUnitario * cantidad,
-    producto_nombre: inventario.nombre,
-    producto_sku: inventario.sku,
-    producto_color: inventario.color,
-    producto_talla: inventario.talla,
-    stock_actual: stock,
+    producto_nombre: producto.nombre,
+    producto_sku: producto.sku,
+    producto_color: producto.color,
+    producto_talla: producto.talla,
+    stock_actual: stockActual,
   };
 }
 
@@ -326,11 +354,17 @@ export async function listPedidos({
   estado_pago = null,
   id_sucursal = null,
   id_cliente = null,
+  es_venta_directa = null,
   limit = 100,
   offset = 0,
 } = {}) {
   const params = [];
   let sql = `${BASE_PEDIDO_SELECT} WHERE p.deleted_at IS NULL`;
+
+  if (es_venta_directa !== null && es_venta_directa !== undefined && es_venta_directa !== '') {
+    sql += ' AND p.es_venta_directa = ?';
+    params.push(Number(es_venta_directa));
+  }
 
   if (estado) {
     sql += ' AND p.estado = ?';
@@ -662,6 +696,7 @@ export async function createPedido(payload, userId = null) {
          id_cliente,
          id_empleado,
          id_sucursal,
+         es_venta_directa,
          fecha_entrega_prometida,
          fecha_entrega_real,
          id_empleado_entrega,
@@ -684,11 +719,12 @@ export async function createPedido(payload, userId = null) {
          estado,
          observaciones,
          created_by
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente', ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente', ?, ?, ?)`,
       [
         idClienteFinal,
         id_empleado,
         id_sucursal,
+        es_venta_directa ? 1 : 0,
         es_venta_directa ? new Date() : fecha_entrega_prometida,
         es_venta_directa ? new Date() : null,
         es_venta_directa ? id_empleado : null,
@@ -735,32 +771,35 @@ export async function createPedido(payload, userId = null) {
         ],
       );
 
-      await connection.execute(
-        `UPDATE inventario
-         SET stock_actual = stock_actual - ?, updated_by = ?
-         WHERE id_inventario = ?`,
-        [detalle.cantidad, userId || id_empleado, detalle.id_inventario],
-      );
+      // Restar del inventario únicamente si está en inventario y hay piezas a descontar
+      if (detalle.id_inventario && detalle.cantidad_a_descontar > 0) {
+        await connection.execute(
+          `UPDATE inventario
+           SET stock_actual = stock_actual - ?, updated_by = ?
+           WHERE id_inventario = ?`,
+          [detalle.cantidad_a_descontar, userId || id_empleado, detalle.id_inventario],
+        );
 
-      await connection.execute(
-        `INSERT INTO movimiento_inventario (
-           id_inventario,
-           id_pedido,
-           id_detalle_pedido,
-           cantidad,
-           tipo,
-           motivo,
-           created_by
-         ) VALUES (?, ?, ?, ?, 'salida', ?, ?)`,
-        [
-          detalle.id_inventario,
-          idPedido,
-          detalleResult.insertId,
-          detalle.cantidad,
-          es_venta_directa ? 'Salida por venta en punto de venta' : 'Salida por venta de pedido',
-          userId || id_empleado,
-        ],
-      );
+        await connection.execute(
+          `INSERT INTO movimiento_inventario (
+             id_inventario,
+             id_pedido,
+             id_detalle_pedido,
+             cantidad,
+             tipo,
+             motivo,
+             created_by
+           ) VALUES (?, ?, ?, ?, 'salida', ?, ?)`,
+          [
+            detalle.id_inventario,
+            idPedido,
+            detalleResult.insertId,
+            detalle.cantidad_a_descontar,
+            es_venta_directa ? 'Salida por venta en punto de venta' : 'Salida por venta de pedido',
+            userId || id_empleado,
+          ],
+        );
+      }
     }
 
     for (const servicio of serviciosNormalizados) {
@@ -812,7 +851,7 @@ export async function createPedido(payload, userId = null) {
         );
       }
 
-      const idCorteCaja = await getOpenCorteId(connection, idEmpleadoPago);
+      const idCorteCaja = await getOpenCorteId(connection, idEmpleadoPago, id_sucursal);
       const concepto = es_venta_directa
         ? 'liquidacion'
         : montoInicial >= total
@@ -932,16 +971,16 @@ export async function addPago(id, payload, userId = null) {
       }
     }
 
-    const idEmpleadoPago = Number(payload.id_empleado || pedido.id_empleado);
+    const idEmpleadoPago = Number(payload.id_empleado || userId || pedido.id_empleado);
     const empleadoPago = await getEmpleadoActivo(connection, idEmpleadoPago);
 
-    if (Number(empleadoPago.id_sucursal) !== Number(pedido.id_sucursal)) {
+    if (empleadoPago.rol !== 'administrador' && Number(empleadoPago.id_sucursal) !== Number(pedido.id_sucursal)) {
       throw ApiError.badRequest(
         'El empleado que recibe el pago no pertenece a la sucursal del pedido',
       );
     }
 
-    const idCorteCaja = await getOpenCorteId(connection, idEmpleadoPago);
+    const idCorteCaja = await getOpenCorteId(connection, idEmpleadoPago, pedido.id_sucursal);
     await connection.execute(
       `INSERT INTO pago (
          id_pedido,
@@ -1007,27 +1046,30 @@ export async function changeEstado(id, payload, userId = null) {
       throw ApiError.conflict('No se puede cambiar el estado de un pedido cancelado');
     }
 
-    const siguienteEstado = {
-      pendiente: 'en_proceso',
-      en_proceso: 'terminado',
-      terminado: 'entregado',
-    }[pedido.estado];
+    const allowedTransitions = {
+      pendiente: ['en_proceso', 'terminado', 'entregado'],
+      en_proceso: ['terminado', 'entregado'],
+      terminado: ['entregado'],
+    };
 
-    if (siguienteEstado !== payload.estado) {
+    const validos = allowedTransitions[pedido.estado] || [];
+    if (!validos.includes(payload.estado)) {
       throw ApiError.badRequest(
-        `No se puede pasar de "${pedido.estado}" a "${payload.estado}". El siguiente estado permitido es "${siguienteEstado ?? 'ninguno'}".`,
+        `No se puede pasar de "${pedido.estado}" a "${payload.estado}". Los estados permitidos son: ${validos.join(', ') || 'ninguno'}.`,
       );
     }
 
-    if (payload.estado === 'en_proceso') {
+    if (['en_proceso', 'terminado'].includes(payload.estado) && pedido.estado === 'pendiente') {
       const totalPagado = await getTotalPagado(connection, id);
       if (totalPagado < Number(pedido.anticipo_requerido)) {
         const anticipoRequerido = Number(pedido.anticipo_requerido).toLocaleString('es-MX');
         throw ApiError.conflict(
-          `El pedido necesita cubrir al menos el anticipo requerido ($${anticipoRequerido}) para pasar a en proceso`,
+          `El pedido necesita cubrir al menos el anticipo requerido ($${anticipoRequerido}) para pasar a ${payload.estado.replace('_', ' ')}`,
         );
       }
     }
+
+    const idEmpleadoEntregaFinal = payload.id_empleado_entrega || userId || pedido.id_empleado;
 
     if (payload.estado === 'entregado') {
       const totalPagado = await getTotalPagado(connection, id);
@@ -1038,13 +1080,13 @@ export async function changeEstado(id, payload, userId = null) {
         );
       }
 
-      if (!payload.id_empleado_entrega) {
+      if (!idEmpleadoEntregaFinal) {
         throw ApiError.badRequest(
           'Debes indicar el empleado que realiza la entrega del pedido',
         );
       }
 
-      await getEmpleadoActivo(connection, payload.id_empleado_entrega);
+      await getEmpleadoActivo(connection, idEmpleadoEntregaFinal);
     }
 
     await connection.execute(
@@ -1059,7 +1101,7 @@ export async function changeEstado(id, payload, userId = null) {
         payload.estado,
         payload.estado,
         payload.estado,
-        payload.id_empleado_entrega || null,
+        idEmpleadoEntregaFinal || null,
         payload.observaciones || null,
         userId || pedido.id_empleado,
         id,
@@ -1130,48 +1172,44 @@ export async function cancelPedido(id, payload, userId = null) {
     );
 
     for (const detalle of detalles) {
-      const [inventarios] = await connection.execute(
-        `SELECT id_inventario
-         FROM inventario
-         WHERE id_producto = ? AND id_sucursal = ? AND deleted_at IS NULL
-         LIMIT 1
-         FOR UPDATE`,
-        [detalle.id_producto, pedido.id_sucursal],
+      // Buscar si hubo movimiento de salida para este detalle_pedido
+      const [movimientos] = await connection.execute(
+        `SELECT id_inventario, cantidad
+         FROM movimiento_inventario
+         WHERE id_pedido = ? AND id_detalle_pedido = ? AND tipo = 'salida'
+         LIMIT 1`,
+        [id, detalle.id_detalle_pedido],
       );
 
-      if (inventarios.length === 0) {
-        throw ApiError.badRequest(
-          'No se encontró el registro de inventario para devolver las piezas del pedido',
+      if (movimientos.length > 0) {
+        const mov = movimientos[0];
+        await connection.execute(
+          `UPDATE inventario
+           SET stock_actual = stock_actual + ?, updated_by = ?
+           WHERE id_inventario = ?`,
+          [mov.cantidad, userId || pedido.id_empleado, mov.id_inventario],
+        );
+
+        await connection.execute(
+          `INSERT INTO movimiento_inventario (
+             id_inventario,
+             id_pedido,
+             id_detalle_pedido,
+             cantidad,
+             tipo,
+             motivo,
+             created_by
+           ) VALUES (?, ?, ?, ?, 'entrada', ?, ?)`,
+          [
+            mov.id_inventario,
+            id,
+            detalle.id_detalle_pedido,
+            mov.cantidad,
+            `Cancelación de pedido: ${payload.motivo}`.slice(0, 100),
+            userId || pedido.id_empleado,
+          ],
         );
       }
-
-      const idInventario = inventarios[0].id_inventario;
-      await connection.execute(
-        `UPDATE inventario
-         SET stock_actual = stock_actual + ?, updated_by = ?
-         WHERE id_inventario = ?`,
-        [detalle.cantidad, userId || pedido.id_empleado, idInventario],
-      );
-
-      await connection.execute(
-        `INSERT INTO movimiento_inventario (
-           id_inventario,
-           id_pedido,
-           id_detalle_pedido,
-           cantidad,
-           tipo,
-           motivo,
-           created_by
-         ) VALUES (?, ?, ?, ?, 'entrada', ?, ?)`,
-        [
-          idInventario,
-          id,
-          detalle.id_detalle_pedido,
-          detalle.cantidad,
-          `Cancelación de pedido: ${payload.motivo}`.slice(0, 100),
-          userId || pedido.id_empleado,
-        ],
-      );
     }
 
     const idEmpleadoCancela = Number(
@@ -1188,8 +1226,8 @@ export async function cancelPedido(id, payload, userId = null) {
       let idCorteCaja = null;
       if (payload.metodo_devolucion === 'efectivo') {
         idCorteCaja =
-          (await findOpenCorteId(connection, idEmpleadoCancela)) ??
-          (await findOpenCorteId(connection, idEmpleadoAutoriza));
+          (await findOpenCorteId(connection, idEmpleadoCancela, pedido.id_sucursal)) ??
+          (await findOpenCorteId(connection, idEmpleadoAutoriza, pedido.id_sucursal));
 
         if (!idCorteCaja) {
           throw ApiError.conflict(
@@ -1247,9 +1285,9 @@ export async function cancelPedido(id, payload, userId = null) {
   }
 }
 
-export async function getPedidoStats() {
-  const [rows] = await pool.execute(
-    `SELECT
+export async function getPedidoStats({ es_venta_directa = null } = {}) {
+  const params = [];
+  let sql = `SELECT
        COUNT(*) AS total,
        SUM(CASE WHEN estado = 'pendiente' THEN 1 ELSE 0 END) AS pendientes,
        SUM(CASE WHEN estado = 'en_proceso' THEN 1 ELSE 0 END) AS en_proceso,
@@ -1268,8 +1306,14 @@ export async function getPedidoStats() {
          END
        ), 0) AS saldo_por_cobrar
      FROM pedido p
-     WHERE p.deleted_at IS NULL`,
-  );
+     WHERE p.deleted_at IS NULL`;
+
+  if (es_venta_directa !== null && es_venta_directa !== undefined && es_venta_directa !== '') {
+    sql += ' AND p.es_venta_directa = ?';
+    params.push(Number(es_venta_directa));
+  }
+
+  const [rows] = await pool.execute(sql, params);
 
   const stats = rows[0];
   return {

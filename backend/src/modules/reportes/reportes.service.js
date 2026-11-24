@@ -133,16 +133,31 @@ export async function getReporteData({
     `SELECT
        s.id_sucursal,
        s.nombre AS sucursal_nombre,
+       s.ciudad,
        COUNT(p.id_pedido) AS total_pedidos,
-       COALESCE(SUM(CASE WHEN p.estado <> 'cancelado' THEN p.total ELSE 0 END), 0) AS total_ventas
+       COALESCE(SUM(CASE WHEN p.estado <> 'cancelado' THEN 1 ELSE 0 END), 0) AS pedidos_activos,
+       COALESCE(SUM(CASE WHEN p.estado <> 'cancelado' THEN p.total ELSE 0 END), 0) AS total_ventas,
+       COALESCE(SUM(CASE WHEN p.estado <> 'cancelado' THEN p.total_piezas ELSE 0 END), 0) AS total_piezas,
+       COALESCE(SUM(CASE WHEN p.estado = 'entregado' THEN 1 ELSE 0 END), 0) AS pedidos_entregados,
+       COALESCE((
+         SELECT SUM(pg.monto)
+         FROM pago pg
+         INNER JOIN pedido p2 ON p2.id_pedido = pg.id_pedido
+         WHERE p2.id_sucursal = s.id_sucursal
+           AND pg.deleted_at IS NULL
+           ${fecha_inicio ? 'AND DATE(pg.fecha_hora) >= ?' : ''}
+           ${fecha_fin ? 'AND DATE(pg.fecha_hora) <= ?' : ''}
+       ), 0) AS total_cobrado
      FROM sucursal s
      LEFT JOIN pedido p ON p.id_sucursal = s.id_sucursal AND p.deleted_at IS NULL
        ${fecha_inicio ? 'AND DATE(p.fecha_pedido) >= ?' : ''}
        ${fecha_fin ? 'AND DATE(p.fecha_pedido) <= ?' : ''}
      WHERE s.deleted_at IS NULL
-     GROUP BY s.id_sucursal, s.nombre
+     GROUP BY s.id_sucursal, s.nombre, s.ciudad
      ORDER BY total_ventas DESC`,
     [
+      ...(fecha_inicio ? [fecha_inicio] : []),
+      ...(fecha_fin ? [fecha_fin] : []),
       ...(fecha_inicio ? [fecha_inicio] : []),
       ...(fecha_fin ? [fecha_fin] : []),
     ],
@@ -220,12 +235,24 @@ export async function getReporteData({
       total_unidades: Number(r.total_unidades || 0),
       total_ingresos: Number(r.total_ingresos || 0),
     })),
-    ventas_por_sucursal: sucursalesRows.map((r) => ({
-      id_sucursal: r.id_sucursal,
-      sucursal_nombre: r.sucursal_nombre,
-      total_pedidos: Number(r.total_pedidos || 0),
-      total_ventas: Number(r.total_ventas || 0),
-    })),
+    ventas_por_sucursal: sucursalesRows.map((r) => {
+      const totalVentas = Number(r.total_ventas || 0);
+      const totalCobrado = Number(r.total_cobrado || 0);
+      const pedidosActivos = Number(r.pedidos_activos || 0);
+      return {
+        id_sucursal: r.id_sucursal,
+        sucursal_nombre: r.sucursal_nombre,
+        ciudad: r.ciudad || '',
+        total_pedidos: Number(r.total_pedidos || 0),
+        pedidos_activos: pedidosActivos,
+        total_ventas: totalVentas,
+        total_piezas: Number(r.total_piezas || 0),
+        pedidos_entregados: Number(r.pedidos_entregados || 0),
+        total_cobrado: totalCobrado,
+        saldo_pendiente: Math.max(0, totalVentas - totalCobrado),
+        ticket_promedio: pedidosActivos > 0 ? Math.round(totalVentas / pedidosActivos) : 0,
+      };
+    }),
     pedidos: pedidosRows.map((p) => ({
       id_pedido: p.id_pedido,
       folio: p.folio,

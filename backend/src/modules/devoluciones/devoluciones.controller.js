@@ -31,7 +31,7 @@ export async function showPedido(req, res) {
 
 export async function store(req, res) {
   const payload = devolucionPayloadSchema.parse(req.body);
-  const data = await createDevolucion(payload);
+  const data = await createDevolucion(payload, req.user?.id_empleado);
   res.status(201).json({
     data,
     message: 'Devolución registrada correctamente',

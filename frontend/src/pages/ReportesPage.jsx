@@ -13,7 +13,6 @@ import {
   Package,
   Printer,
   Receipt,
-  RefreshCw,
   Search,
   Store,
   Tag,
@@ -121,6 +120,17 @@ export default function ReportesPage() {
       })
       .catch(() => {});
   }, []);
+
+  const sucursalesParaFiltro = useMemo(() => {
+    if (sucursales.length > 0) return sucursales;
+    if (data?.ventas_por_sucursal && data.ventas_por_sucursal.length > 0) {
+      return data.ventas_por_sucursal.map((s) => ({
+        id_sucursal: s.id_sucursal,
+        nombre: s.sucursal_nombre,
+      }));
+    }
+    return [];
+  }, [sucursales, data?.ventas_por_sucursal]);
 
   const loadReporte = useCallback(async () => {
     setLoading(true);
@@ -363,28 +373,14 @@ export default function ReportesPage() {
                 onChange={(e) => setIdSucursal(e.target.value)}
                 className="rounded-xl border border-line bg-sand px-3 py-1.5 text-xs font-semibold text-ink focus:border-clay focus:outline-none"
               >
-                <option value="">Todas las sucursales (Consolidado)</option>
-                {sucursales.map((s) => (
+                <option value="">Todas las sucursales</option>
+                {sucursalesParaFiltro.map((s) => (
                   <option key={s.id_sucursal} value={s.id_sucursal}>
                     {s.nombre}
-                    {String(s.id_sucursal) === getActiveSucursalId()
-                      ? ' (Tu sucursal)'
-                      : ''}
                   </option>
                 ))}
               </select>
             </div>
-
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={loadReporte}
-              loading={loading}
-              className="h-8 px-2.5"
-            >
-              <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-            </Button>
           </div>
         </div>
 
@@ -394,9 +390,9 @@ export default function ReportesPage() {
             Filtrando datos de:{' '}
             <strong className="font-semibold text-ink">
               {idSucursal
-                ? sucursales.find((s) => s.id_sucursal === Number(idSucursal))?.nombre ||
+                ? sucursalesParaFiltro.find((s) => Number(s.id_sucursal) === Number(idSucursal))?.nombre ||
                   `Sucursal #${idSucursal}`
-                : 'Todas las sucursales (Consolidado general)'}
+                : 'Todas las sucursales'}
             </strong>
             {idSucursal && String(idSucursal) === getActiveSucursalId() && (
               <span className="ml-1.5 rounded-full bg-clay/10 px-2 py-0.5 text-[0.65rem] font-bold text-clay">
@@ -404,16 +400,6 @@ export default function ReportesPage() {
               </span>
             )}
           </span>
-
-          {idSucursal && (
-            <button
-              type="button"
-              onClick={() => setIdSucursal('')}
-              className="font-semibold text-clay hover:underline"
-            >
-              Ver consolidado de todas las sucursales
-            </button>
-          )}
         </div>
       </div>
 
@@ -532,8 +518,7 @@ export default function ReportesPage() {
       {/* CONTENIDO DE LAS PESTAÑAS */}
 
       {/* TAB 1: VENTAS Y FINANZAS */}
-      {(activeTab === 'ventas' || window.matchMedia('print').matches) && (
-        <div className="space-y-6">
+      <div className={cn('space-y-6', activeTab !== 'ventas' && 'hidden print:block')}>
           {/* Desglose de Métodos de Pago y Estados */}
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Métodos de Pago */}
@@ -657,11 +642,9 @@ export default function ReportesPage() {
             </div>
           </div>
         </div>
-      )}
 
       {/* TAB 2: TOP PRODUCTOS MÁS VENDIDOS */}
-      {(activeTab === 'productos' || window.matchMedia('print').matches) && (
-        <div className="rounded-2xl border border-line bg-paper p-5 shadow-soft">
+      <div className={cn('rounded-2xl border border-line bg-paper p-5 shadow-soft', activeTab !== 'productos' && 'hidden print:block')}>
           <div className="border-b border-line pb-4">
             <h3 className="font-display text-lg font-semibold text-ink">
               Top 10 Productos Más Vendidos
@@ -725,53 +708,209 @@ export default function ReportesPage() {
             </table>
           </div>
         </div>
-      )}
 
       {/* TAB 3: VENTAS POR SUCURSAL */}
-      {(activeTab === 'sucursales' || window.matchMedia('print').matches) && (
-        <div className="rounded-2xl border border-line bg-paper p-5 shadow-soft">
-          <div className="border-b border-line pb-4">
-            <h3 className="font-display text-lg font-semibold text-ink">
-              Rendimiento por Sucursal
-            </h3>
-            <p className="mt-0.5 text-xs text-muted">
-              Comparativa de volumen de pedidos y ventas totales en cada sucursal
-            </p>
+      <div className={cn('space-y-6', activeTab !== 'sucursales' && 'hidden print:block')}>
+          <div className="rounded-2xl border border-line bg-paper p-5 shadow-soft">
+            <div className="border-b border-line pb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div>
+                <h3 className="font-display text-lg font-semibold text-ink">
+                  Rendimiento Separado por Sucursal
+                </h3>
+                <p className="mt-0.5 text-xs text-muted">
+                  Comparativa de facturación, cobros en caja, piezas vendidas y saldo por sucursal
+                </p>
+              </div>
+              {idSucursal && (
+                <button
+                  type="button"
+                  onClick={() => setIdSucursal('')}
+                  className="text-xs font-semibold text-clay bg-sand px-3 py-1.5 rounded-xl hover:bg-sand/70 transition w-fit"
+                >
+                  Ver todas las sucursales
+                </button>
+              )}
+            </div>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {data?.ventas_por_sucursal?.map((suc) => {
+                const totalGlobal = data?.resumen?.total_ventas || 1;
+                const pct = Math.round((Number(suc.total_ventas) / totalGlobal) * 100);
+                const isSelected = String(suc.id_sucursal) === String(idSucursal);
+
+                return (
+                  <div
+                    key={suc.id_sucursal}
+                    className={cn(
+                      'rounded-2xl border p-5 transition',
+                      isSelected
+                        ? 'border-clay bg-clay/5 shadow-sm'
+                        : 'border-line bg-sand/30 hover:bg-sand/50',
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-clay/10 text-clay">
+                          <Store className="h-5 w-5" aria-hidden="true" />
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-ink">{suc.sucursal_nombre}</h4>
+                          <p className="text-xs text-muted">
+                            {suc.ciudad ? `${suc.ciudad} · ` : ''}{suc.total_pedidos} pedido(s)
+                          </p>
+                        </div>
+                      </div>
+                      <span className="rounded-full bg-clay/10 px-2 py-0.5 text-xs font-bold text-clay">
+                        {pct}%
+                      </span>
+                    </div>
+
+                    <div className="mt-4 border-t border-line/70 pt-3 space-y-2">
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-xs text-muted">Total facturado:</span>
+                        <span className="font-display text-xl font-bold text-clay">
+                          {formatMoney(suc.total_ventas)}
+                        </span>
+                      </div>
+                      <div className="flex items-baseline justify-between text-xs">
+                        <span className="text-muted">Cobrado en caja:</span>
+                        <span className="font-semibold text-forest">
+                          {formatMoney(suc.total_cobrado)}
+                        </span>
+                      </div>
+                      <div className="flex items-baseline justify-between text-xs">
+                        <span className="text-muted">Saldo pendiente:</span>
+                        <span className={Number(suc.saldo_pendiente) > 0 ? 'font-semibold text-danger' : 'font-semibold text-forest'}>
+                          {formatMoney(suc.saldo_pendiente)}
+                        </span>
+                      </div>
+                      <div className="flex items-baseline justify-between text-xs">
+                        <span className="text-muted">Prendas vendidas:</span>
+                        <span className="font-semibold text-ink">{suc.total_piezas} piezas</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 border-t border-line/60 pt-3 flex items-center justify-between">
+                      {isSelected ? (
+                        <span className="text-xs font-bold text-forest">
+                          ✓ Sucursal filtrada actualmente
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setIdSucursal(String(suc.id_sucursal))}
+                          className="text-xs font-semibold text-clay hover:underline"
+                        >
+                          Filtrar solo esta sucursal →
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {data?.ventas_por_sucursal?.map((suc) => (
-              <div
-                key={suc.id_sucursal}
-                className="rounded-2xl border border-line bg-sand/30 p-5"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-clay/10 text-clay">
-                    <Store className="h-5 w-5" aria-hidden="true" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-ink">{suc.sucursal_nombre}</h4>
-                    <p className="text-xs text-muted">
-                      {suc.total_pedidos} pedido(s) registrados
-                    </p>
-                  </div>
-                </div>
+          {/* TABLA COMPARATIVA DETALLADA DE SUCURSALES */}
+          <div className="rounded-2xl border border-line bg-paper p-5 shadow-soft">
+            <div className="border-b border-line pb-3">
+              <h4 className="font-display text-base font-semibold text-ink">
+                Tabla Comparativa por Sucursal
+              </h4>
+              <p className="text-xs text-muted">
+                Resumen tabular de todas las sucursales separadas
+              </p>
+            </div>
 
-                <div className="mt-4 border-t border-line/70 pt-3">
-                  <p className="text-xs text-muted">Total facturado:</p>
-                  <p className="font-display text-2xl font-bold text-clay">
-                    {formatMoney(suc.total_ventas)}
-                  </p>
-                </div>
-              </div>
-            ))}
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b border-line text-xs font-semibold uppercase tracking-wider text-muted">
+                  <tr>
+                    <th className="py-3 pr-4">Sucursal</th>
+                    <th className="py-3 pr-4 text-center">Pedidos</th>
+                    <th className="py-3 pr-4 text-center">Prendas</th>
+                    <th className="py-3 pr-4 text-right">Facturado</th>
+                    <th className="py-3 pr-4 text-right">Cobrado</th>
+                    <th className="py-3 pr-4 text-right">Por Cobrar</th>
+                    <th className="py-3 pr-4 text-center">% Ventas</th>
+                    <th className="py-3 text-right">Acción</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line/60">
+                  {data?.ventas_por_sucursal && data.ventas_por_sucursal.length > 0 ? (
+                    data.ventas_por_sucursal.map((suc) => {
+                      const totalGlobal = data?.resumen?.total_ventas || 1;
+                      const pct = Math.round((Number(suc.total_ventas) / totalGlobal) * 100);
+                      const isSelected = String(suc.id_sucursal) === String(idSucursal);
+
+                      return (
+                        <tr
+                          key={suc.id_sucursal}
+                          className={cn('hover:bg-sand/40', isSelected && 'bg-clay/5')}
+                        >
+                          <td className="py-3.5 pr-4">
+                            <p className="font-semibold text-ink">{suc.sucursal_nombre}</p>
+                            {suc.ciudad && <p className="text-xs text-muted">{suc.ciudad}</p>}
+                          </td>
+                          <td className="py-3.5 pr-4 text-center font-semibold text-ink">
+                            {suc.total_pedidos}
+                          </td>
+                          <td className="py-3.5 pr-4 text-center text-muted">
+                            {suc.total_piezas}
+                          </td>
+                          <td className="py-3.5 pr-4 text-right font-bold text-clay">
+                            {formatMoney(suc.total_ventas)}
+                          </td>
+                          <td className="py-3.5 pr-4 text-right font-semibold text-forest">
+                            {formatMoney(suc.total_cobrado)}
+                          </td>
+                          <td className="py-3.5 pr-4 text-right font-semibold">
+                            <span className={Number(suc.saldo_pendiente) > 0 ? 'text-danger' : 'text-forest'}>
+                              {formatMoney(suc.saldo_pendiente)}
+                            </span>
+                          </td>
+                          <td className="py-3.5 pr-4 text-center">
+                            <span className="rounded-full bg-sand px-2 py-0.5 text-xs font-bold text-ink">
+                              {pct}%
+                            </span>
+                          </td>
+                          <td className="py-3.5 text-right">
+                            {isSelected ? (
+                              <button
+                                type="button"
+                                onClick={() => setIdSucursal('')}
+                                className="text-xs font-semibold text-muted hover:underline"
+                              >
+                                Quitar filtro
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setIdSucursal(String(suc.id_sucursal))}
+                                className="text-xs font-semibold text-clay hover:underline"
+                              >
+                                Ver sucursal
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={8} className="py-6 text-center text-xs text-muted">
+                        No hay datos de sucursales en este periodo.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
-      )}
 
       {/* TAB 4: DETALLE DE PEDIDOS Y TRANSACCIONES */}
-      {(activeTab === 'detalle' || window.matchMedia('print').matches) && (
-        <div className="rounded-2xl border border-line bg-paper p-5 shadow-soft">
+      <div className={cn('rounded-2xl border border-line bg-paper p-5 shadow-soft', activeTab !== 'detalle' && 'hidden print:block')}>
           <div className="flex flex-col gap-3 border-b border-line pb-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 className="font-display text-lg font-semibold text-ink">
@@ -866,7 +1005,6 @@ export default function ReportesPage() {
             </table>
           </div>
         </div>
-      )}
     </div>
   );
 }

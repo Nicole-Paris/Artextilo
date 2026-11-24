@@ -336,9 +336,28 @@ export async function openCorte(payload, userId = null) {
     const actorApertura = await getEmpleadoActivo(connection, empleadoApertura);
     assertPuedeGestionarCaja(actorApertura, 'abrir', id_sucursal);
 
+    const [openSucursalCortes] = await connection.execute(
+      `SELECT cc.id_corte_caja, cc.id_empleado, CONCAT_WS(' ', e.nombre, e.apellido_paterno) AS empleado_nombre
+       FROM corte_caja cc
+       INNER JOIN empleado e ON e.id_empleado = cc.id_empleado
+       WHERE cc.id_sucursal = ? AND cc.estado = 'abierto' AND cc.deleted_at IS NULL
+       LIMIT 1`,
+      [id_sucursal],
+    );
+
+    if (openSucursalCortes.length > 0) {
+      const abierta = openSucursalCortes[0];
+      if (Number(abierta.id_empleado) === Number(id_empleado)) {
+        throw ApiError.conflict('Ya tienes una caja abierta en esta sucursal');
+      }
+      throw ApiError.conflict(
+        `La sucursal tiene un turno anterior abierto por ${abierta.empleado_nombre}. Debe realizarse el corte de ese turno para dejar la caja limpia al próximo turno.`,
+      );
+    }
+
     const openCorte = await findOpenCorte(connection, id_empleado);
     if (openCorte) {
-      throw ApiError.conflict('El empleado ya tiene una caja abierta');
+      throw ApiError.conflict('El empleado ya tiene una caja abierta en otra sucursal');
     }
 
     const [result] = await connection.execute(

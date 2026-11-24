@@ -69,10 +69,12 @@ export const clientePayloadSchema = z.object({
 }).superRefine((payload, ctx) => {
   if (payload.tiene_credito === false) return;
   if (payload.tiene_credito === true || payload.limite_credito !== undefined) {
+    const limit = Number(payload.limite_credito);
     if (
-      !Number.isInteger(payload.limite_credito) ||
-      payload.limite_credito <= 0 ||
-      payload.limite_credito > 99999999
+      typeof payload.limite_credito === 'boolean' ||
+      Number.isNaN(limit) ||
+      limit <= 0 ||
+      limit > 99999999
     ) {
       ctx.addIssue({
         code: 'custom',
@@ -84,7 +86,7 @@ export const clientePayloadSchema = z.object({
 }).transform((payload) =>
   payload.tiene_credito === false
     ? { ...payload, limite_credito: 0 }
-    : payload,
+    : { ...payload, limite_credito: payload.limite_credito !== undefined ? Number(payload.limite_credito) : payload.limite_credito },
 );
 
 export const clienteCreditoPayloadSchema = z
@@ -95,11 +97,13 @@ export const clienteCreditoPayloadSchema = z
     limite_credito: z.unknown().optional(),
   })
   .superRefine((payload, ctx) => {
+    const limit = Number(payload.limite_credito);
     if (
       payload.tiene_credito &&
-      (!Number.isInteger(payload.limite_credito) ||
-        payload.limite_credito <= 0 ||
-        payload.limite_credito > 99999999)
+      (typeof payload.limite_credito === 'boolean' ||
+        Number.isNaN(limit) ||
+        limit <= 0 ||
+        limit > 99999999)
     ) {
       ctx.addIssue({
         code: 'custom',
@@ -110,7 +114,7 @@ export const clienteCreditoPayloadSchema = z
   })
   .transform((payload) => ({
     tiene_credito: payload.tiene_credito,
-    limite_credito: payload.tiene_credito ? payload.limite_credito : 0,
+    limite_credito: payload.tiene_credito ? Number(payload.limite_credito) : 0,
   }));
 
 export const clienteIdSchema = z.coerce

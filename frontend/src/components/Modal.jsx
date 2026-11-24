@@ -27,9 +27,9 @@ export default function Modal({
   if (!open) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center print:static print:block print:p-0">
       <div
-        className="absolute inset-0 bg-forest/45 backdrop-blur-sm"
+        className="absolute inset-0 bg-forest/45 backdrop-blur-sm print:hidden"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -42,11 +42,11 @@ export default function Modal({
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
         className={cn(
-          'relative w-full overflow-hidden rounded-2xl border border-line bg-paper shadow-soft outline-none',
+          'relative w-full overflow-hidden rounded-2xl border border-line bg-paper shadow-soft outline-none print:static print:block print:border-none print:shadow-none print:bg-transparent print:p-0 print:overflow-visible print:max-w-none print:w-auto',
           size === 'sm' ? 'max-w-md' : size === 'lg' ? 'max-w-3xl' : 'max-w-2xl',
         )}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-5 sm:px-6">
+        <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-5 sm:px-6 print:hidden">
           <div>
             <h2 id={titleId} className="font-display text-xl font-semibold text-ink">
               {title}
@@ -67,10 +67,10 @@ export default function Modal({
           </button>
         </div>
 
-        <div className="max-h-[70vh] overflow-y-auto px-5 py-5 sm:px-6">{children}</div>
+        <div className="max-h-[70vh] overflow-y-auto px-5 py-5 sm:px-6 print:max-h-none print:overflow-visible print:p-0 print:m-0">{children}</div>
 
         {footer && (
-          <div className="flex flex-col-reverse gap-2 border-t border-line bg-sand/60 px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+          <div className="flex flex-col-reverse gap-2 border-t border-line bg-sand/60 px-5 py-4 sm:flex-row sm:justify-end sm:px-6 print:hidden">
             {footer}
           </div>
         )}

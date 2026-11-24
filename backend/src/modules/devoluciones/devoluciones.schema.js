@@ -16,9 +16,8 @@ export const devolucionIdSchema = positiveId('El ID debe ser un entero positivo'
 export const devolucionPayloadSchema = z.object({
   id_pedido: positiveId('El ID del pedido debe ser un entero positivo'),
   monto: z.coerce
-    .number({ error: 'El monto debe ser un número entero mayor a cero' })
-    .int('El monto debe ser un número entero mayor a cero')
-    .positive('El monto debe ser un número entero mayor a cero'),
+    .number({ error: 'El monto debe ser un número mayor a cero' })
+    .positive('El monto debe ser un número mayor a cero'),
   metodo: z.enum(['efectivo', 'transferencia', 'tarjeta'], {
     error: 'El método debe ser efectivo, transferencia o tarjeta',
   }),

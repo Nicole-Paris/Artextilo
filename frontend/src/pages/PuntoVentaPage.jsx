@@ -4,16 +4,20 @@ import {
   AlertCircle,
   ArrowRight,
   CheckCircle2,
+  Clock,
+  Eye,
   Minus,
   Percent,
   Plus,
   Printer,
+  Receipt,
   RefreshCw,
   Search,
   ShoppingBag,
   Store,
   Tag,
   Trash2,
+  TrendingUp,
   Wallet,
   X,
 } from 'lucide-react';
@@ -27,6 +31,7 @@ import { empleadosApi } from '../api/empleados.js';
 import { globalValuesApi } from '../api/global-values.js';
 import { inventarioApi } from '../api/inventario.js';
 import { pedidosApi } from '../api/pedidos.js';
+import { reportesApi } from '../api/reportes.js';
 import { cn } from '../lib/cn.js';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 
@@ -58,6 +63,7 @@ export default function PuntoVentaPage() {
 
   // Inventario y Catálogos
   const [inventario, setInventario] = useState([]);
+  const [topProductosIds, setTopProductosIds] = useState([]);
   const [categorias, setCategorias] = useState([]);
   const [empleados, setEmpleados] = useState([]);
   const [loadingInventario, setLoadingInventario] = useState(true);
@@ -90,6 +96,13 @@ export default function PuntoVentaPage() {
   // Modal de Ticket Exitoso
   const [ticketVenta, setTicketVenta] = useState(null);
   const [modalTicket, setModalTicket] = useState(false);
+
+  // Pestañas: 'pos' (Venta en mostrador) | 'historial' (Historial de ventas registradas)
+  const [activeTab, setActiveTab] = useState('pos');
+  const [historialVentas, setHistorialVentas] = useState([]);
+  const [loadingHistorial, setLoadingHistorial] = useState(false);
+  const [searchHistorial, setSearchHistorial] = useState('');
+  const [loadingDetalleVenta, setLoadingDetalleVenta] = useState(false);
 
   // Escuchar cambios de sucursal en el header
   useEffect(() => {
@@ -134,16 +147,20 @@ export default function PuntoVentaPage() {
     }
     setLoadingInventario(true);
     try {
-      const [invRes, catRes, gvRes, empRes] = await Promise.all([
+      const [invRes, catRes, gvRes, empRes, repRes] = await Promise.all([
         inventarioApi.list({ id_sucursal: idSucursal, limite: 250 }),
         categoriasApi.list(),
         globalValuesApi.getAll().catch(() => ({ data: [] })),
         empleadosApi.list().catch(() => ({ data: [] })),
+        reportesApi.getReporte({ id_sucursal: idSucursal }).catch(() => ({ data: {} })),
       ]);
 
       setInventario(invRes.data || []);
       setCategorias(catRes.data || []);
       setEmpleados((empRes.data || []).filter((e) => e.estado === 'activo'));
+
+      const topList = repRes?.data?.top_productos || [];
+      setTopProductosIds(topList.map((p) => p.id_producto));
 
       const gvList = gvRes.data || [];
       const gvMin = gvList.find((v) => v.nombre === 'mayoreo_minimo_piezas');
@@ -162,6 +179,90 @@ export default function PuntoVentaPage() {
   useEffect(() => {
     loadInventario();
   }, [loadInventario]);
+
+  // Cargar historial de ventas directas de POS
+  const loadHistorialVentas = useCallback(async () => {
+    setLoadingHistorial(true);
+    try {
+      const filters = {
+        es_venta_directa: 1,
+        limit: 200,
+      };
+      if (idSucursal) {
+        filters.id_sucursal = idSucursal;
+      }
+      const res = await pedidosApi.list(filters);
+      setHistorialVentas(res.data || []);
+    } catch (err) {
+      console.error('Error cargando historial de ventas:', err);
+    } finally {
+      setLoadingHistorial(false);
+    }
+  }, [idSucursal]);
+
+  useEffect(() => {
+    if (activeTab === 'historial') {
+      loadHistorialVentas();
+    }
+  }, [activeTab, loadHistorialVentas]);
+
+  // Filtrado y totales del historial
+  const ventasFiltradas = useMemo(() => {
+    const term = searchHistorial.trim().toLowerCase();
+    return historialVentas.filter((v) => {
+      if (!term) return true;
+      const folio = String(v.folio || '').toLowerCase();
+      const cajero = String(v.empleado_nombre || '').toLowerCase();
+      const totalStr = String(v.total || '');
+      return folio.includes(term) || cajero.includes(term) || totalStr.includes(term);
+    });
+  }, [historialVentas, searchHistorial]);
+
+  const totalVendidoHistorial = useMemo(
+    () => ventasFiltradas.reduce((acc, v) => acc + Number(v.total || 0), 0),
+    [ventasFiltradas],
+  );
+
+  const totalPiezasHistorial = useMemo(
+    () => ventasFiltradas.reduce((acc, v) => acc + Number(v.total_piezas || 0), 0),
+    [ventasFiltradas],
+  );
+
+  // Ver ticket o reimprimir desde el historial
+  async function verTicketHistorial(pedidoResumen) {
+    setLoadingDetalleVenta(true);
+    try {
+      const res = await pedidosApi.get(pedidoResumen.id_pedido);
+      const data = res.data;
+      const primerPago = data.pagos?.[0];
+      const ticketInfo = {
+        folio: data.folio || `P-${String(data.id_pedido).padStart(4, '0')}`,
+        articulos: (data.detalles || []).map((d) => ({
+          cantidad: d.cantidad,
+          nombre: d.producto_nombre,
+          talla: d.producto_talla,
+          color: d.producto_color,
+          precio: Number(d.precio_unitario),
+        })),
+        subtotal: Number(data.subtotal || data.total),
+        descuento: Number(data.descuento_monto || 0),
+        total: Number(data.total),
+        metodoPago: primerPago?.metodo_pago || 'efectivo',
+        montoRecibido: Number(primerPago?.monto || data.total),
+        cambio: 0,
+        clienteNombre: data.cliente_nombre || 'Público en general',
+        cajeroNombre: data.empleado_nombre || 'Cajero en turno',
+        sucursalNombre: data.sucursal_nombre || session?.sucursal || 'Sucursal Centro',
+        fecha: new Date(data.fecha_pedido || data.created_at),
+      };
+      setTicketVenta(ticketInfo);
+      setModalTicket(true);
+    } catch (err) {
+      alert(err.message || 'Error al obtener el comprobante de venta');
+    } finally {
+      setLoadingDetalleVenta(false);
+    }
+  }
 
   // Abrir caja directamente desde POS
   async function handleAbrirCaja(e) {
@@ -191,8 +292,42 @@ export default function PuntoVentaPage() {
   // Filtrado de productos en inventario
   const productosFiltrados = useMemo(() => {
     const term = search.trim().toLowerCase();
+
+    // Filtro "Más vendidas" (por defecto cuando categoriaSel === '')
+    if (!categoriaSel) {
+      let items = [...inventario];
+
+      // Ordenar por volumen de ventas (los que están en topProductosIds primero)
+      items.sort((a, b) => {
+        const idxA = topProductosIds.indexOf(a.id_producto);
+        const idxB = topProductosIds.indexOf(b.id_producto);
+        const rankA = idxA !== -1 ? idxA : 9999;
+        const rankB = idxB !== -1 ? idxB : 9999;
+        return rankA - rankB;
+      });
+
+      if (term) {
+        return items.filter((item) => {
+          const nombre = String(item.producto_nombre || '').toLowerCase();
+          const sku = String(item.producto_sku || '').toLowerCase();
+          const color = String(item.producto_color || '').toLowerCase();
+          const talla = String(item.producto_talla || '').toLowerCase();
+          return (
+            nombre.includes(term) ||
+            sku.includes(term) ||
+            color.includes(term) ||
+            talla.includes(term)
+          );
+        });
+      }
+
+      // Exactamente las 8 más vendidas
+      return items.slice(0, 8);
+    }
+
+    // Filtrar por categoría seleccionada
     return inventario.filter((item) => {
-      if (categoriaSel && String(item.id_categoria) !== String(categoriaSel)) {
+      if (String(item.id_categoria) !== String(categoriaSel)) {
         return false;
       }
       if (!term) return true;
@@ -207,17 +342,18 @@ export default function PuntoVentaPage() {
         talla.includes(term)
       );
     });
-  }, [inventario, search, categoriaSel]);
+  }, [inventario, search, categoriaSel, topProductosIds]);
 
-  // Agregar producto al carrito
+  // Agregar producto al carrito (validando stock)
   function addToCart(producto) {
-    if (Number(producto.stock_actual) <= 0) return;
+    const stockActual = Number(producto.stock_actual || 0);
+    if (stockActual <= 0) return; // No permitir agregar productos sin stock
 
     setCart((prev) => {
       const existing = prev.find((item) => item.id_producto === producto.id_producto);
       if (existing) {
-        if (existing.cantidad >= Number(producto.stock_actual)) {
-          return prev; // No exceder stock
+        if (existing.cantidad >= stockActual) {
+          return prev; // No exceder el stock disponible
         }
         return prev.map((item) =>
           item.id_producto === producto.id_producto
@@ -235,7 +371,7 @@ export default function PuntoVentaPage() {
           color: producto.producto_color,
           talla: producto.producto_talla,
           precio: Number(producto.producto_precio),
-          stock_actual: Number(producto.stock_actual),
+          stock_actual: stockActual,
           cantidad: 1,
         },
       ];
@@ -247,7 +383,8 @@ export default function PuntoVentaPage() {
       prev
         .map((item) => {
           if (item.id_producto !== id_producto) return item;
-          const clamped = Math.max(0, Math.min(newQty, item.stock_actual));
+          const maxStock = Number(item.stock_actual || 0);
+          const clamped = Math.max(0, maxStock > 0 ? Math.min(newQty, maxStock) : newQty);
           return { ...item, cantidad: clamped };
         })
         .filter((item) => item.cantidad > 0),
@@ -296,9 +433,18 @@ export default function PuntoVentaPage() {
 
   const total = Math.max(0, subtotal - descuentoCalculado);
 
+  // Verificar si hay artículos en el carrito sin stock disponible
+  const hayArticulosSinStock = useMemo(() => {
+    return cart.some(
+      (item) =>
+        Number(item.stock_actual || 0) <= 0 ||
+        item.cantidad > Number(item.stock_actual || 0),
+    );
+  }, [cart]);
+
   // Abrir modal de cobro
   function abrirCobro() {
-    if (cart.length === 0 || !cajaAbierta) return;
+    if (cart.length === 0 || !cajaAbierta || hayArticulosSinStock) return;
     setMontoRecibido(String(total));
     setReferenciaPago('');
     setMetodoPago('efectivo');
@@ -323,6 +469,11 @@ export default function PuntoVentaPage() {
 
     if (!cajaAbierta) {
       setSaleError('No hay una caja abierta para registrar esta venta.');
+      return;
+    }
+
+    if (hayArticulosSinStock) {
+      setSaleError('Hay prendas en el ticket que no cuentan con stock suficiente en esta sucursal.');
       return;
     }
 
@@ -394,8 +545,9 @@ export default function PuntoVentaPage() {
       clearCart();
       setModalTicket(true);
 
-      // Recargar inventario para actualizar stocks
+      // Recargar inventario para actualizar stocks y sincronizar historial
       loadInventario();
+      loadHistorialVentas();
     } catch (err) {
       setSaleError(err.message || 'Error al procesar la venta');
     } finally {
@@ -451,47 +603,213 @@ export default function PuntoVentaPage() {
               </Button>
             </div>
           )}
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              checkCaja();
-              loadInventario();
-            }}
-            title="Recargar inventario y estado de caja"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </Button>
         </div>
       </div>
 
-      {/* Alerta si la caja está cerrada */}
-      {!checkingCaja && !cajaAbierta && (
-        <Alert variant="warning">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="font-semibold text-ink">
-                Se requiere turno de caja abierto para registrar ventas
+      {/* Pestañas: Nueva Venta vs Historial de Ventas Registradas */}
+      <div className="flex border-b border-line gap-2">
+        <button
+          type="button"
+          onClick={() => setActiveTab('pos')}
+          className={cn(
+            'flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold transition cursor-pointer',
+            activeTab === 'pos'
+              ? 'border-clay text-clay'
+              : 'border-transparent text-muted hover:text-ink',
+          )}
+        >
+          <ShoppingBag className="h-4 w-4" />
+          Nueva Venta
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('historial');
+            loadHistorialVentas();
+          }}
+          className={cn(
+            'flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold transition cursor-pointer',
+            activeTab === 'historial'
+              ? 'border-clay text-clay'
+              : 'border-transparent text-muted hover:text-ink',
+          )}
+        >
+          <Receipt className="h-4 w-4" />
+          Historial de Ventas
+          {historialVentas.length > 0 && (
+            <span className="ml-1 rounded-full bg-sand px-2 py-0.5 text-xs text-ink font-semibold">
+              {historialVentas.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {activeTab === 'historial' ? (
+        <div className="space-y-4">
+          {/* Métricas rápidas de ventas de mostrador */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl border border-line bg-paper p-4 shadow-soft">
+              <span className="text-xs font-semibold text-muted">Ventas Registradas</span>
+              <p className="mt-1 font-display text-2xl font-bold text-ink">
+                {ventasFiltradas.length}
               </p>
-              <p className="text-xs text-muted mt-0.5">
-                Por control interno, no se pueden realizar ventas en mostrador sin que el cajero tenga una caja activa donde ingresar los cobros.
-              </p>
+              <p className="text-[11px] text-muted mt-0.5">Operaciones cobradas en mostrador</p>
             </div>
+
+            <div className="rounded-2xl border border-line bg-paper p-4 shadow-soft">
+              <span className="text-xs font-semibold text-muted">Total Cobrado</span>
+              <p className="mt-1 font-display text-2xl font-bold text-clay">
+                {formatMoney(totalVendidoHistorial)}
+              </p>
+              <p className="text-[11px] text-muted mt-0.5">Ingresos directos por venta rápida</p>
+            </div>
+
+            <div className="rounded-2xl border border-line bg-paper p-4 shadow-soft">
+              <span className="text-xs font-semibold text-muted">Prendas Entregadas</span>
+              <p className="mt-1 font-display text-2xl font-bold text-ink">
+                {totalPiezasHistorial}
+              </p>
+              <p className="text-[11px] text-muted mt-0.5">Piezas físicas despachadas</p>
+            </div>
+          </div>
+
+          {/* Barra de búsqueda y recarga */}
+          <div className="flex flex-col gap-3 rounded-2xl border border-line bg-paper p-4 shadow-soft sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+              <input
+                type="text"
+                placeholder="Buscar por folio (ej. P-0002) o cajero…"
+                value={searchHistorial}
+                onChange={(e) => setSearchHistorial(e.target.value)}
+                className={cn(inputClass(), 'pl-10 text-xs')}
+              />
+              {searchHistorial && (
+                <button
+                  type="button"
+                  onClick={() => setSearchHistorial('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-ink text-xs p-1"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
             <Button
+              variant="secondary"
               size="sm"
-              onClick={() => setModalAbrirCaja(true)}
-              className="shrink-0"
+              onClick={loadHistorialVentas}
+              loading={loadingHistorial}
+              className="gap-1.5 text-xs shrink-0"
             >
-              <Wallet className="mr-1.5 h-4 w-4" />
-              Abrir caja de turno
+              <RefreshCw className="h-3.5 w-3.5" />
+              Actualizar lista
             </Button>
           </div>
-        </Alert>
-      )}
 
-      {/* Grid Principal: Catálogo a la izquierda, Ticket a la derecha */}
-      <div className="grid gap-5 lg:grid-cols-12 items-start">
+          {/* Tabla de ventas registradas */}
+          <div className="rounded-2xl border border-line bg-paper shadow-soft overflow-hidden">
+            {loadingHistorial ? (
+              <div className="p-12 text-center text-muted">
+                <div className="mx-auto h-7 w-7 animate-spin rounded-full border-2 border-clay border-t-transparent mb-2" />
+                <p className="text-xs font-semibold">Cargando historial de ventas…</p>
+              </div>
+            ) : ventasFiltradas.length === 0 ? (
+              <div className="p-12 text-center text-muted">
+                <Receipt className="mx-auto h-10 w-10 text-muted/30 mb-2" />
+                <p className="text-sm font-semibold text-ink">No hay ventas registradas</p>
+                <p className="text-xs text-muted mt-1">
+                  {searchHistorial
+                    ? 'Ninguna venta coincide con el filtro de búsqueda.'
+                    : 'Las ventas liquidadas en el Punto de Venta aparecerán en este historial.'}
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-left text-xs">
+                  <thead className="bg-sand/60 text-muted border-b border-line">
+                    <tr>
+                      <th className="px-4 py-3 font-semibold">Folio</th>
+                      <th className="px-4 py-3 font-semibold">Fecha y Hora</th>
+                      <th className="px-4 py-3 font-semibold">Cajero</th>
+                      <th className="px-4 py-3 font-semibold">Prendas</th>
+                      <th className="px-4 py-3 font-semibold">Total</th>
+                      <th className="px-4 py-3 font-semibold">Estado</th>
+                      <th className="px-4 py-3 font-semibold text-right">Comprobante</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line/60">
+                    {ventasFiltradas.map((v) => (
+                      <tr key={v.id_pedido} className="hover:bg-sand/30 transition">
+                        <td className="px-4 py-3 font-mono font-bold text-ink">
+                          {v.folio || `P-${String(v.id_pedido).padStart(4, '0')}`}
+                        </td>
+                        <td className="px-4 py-3 text-muted">
+                          {formatDateTime(v.fecha_pedido || v.created_at)}
+                        </td>
+                        <td className="px-4 py-3 text-ink font-medium">
+                          {v.empleado_nombre || 'Cajero en turno'}
+                        </td>
+                        <td className="px-4 py-3 text-muted">
+                          {v.total_piezas} {v.total_piezas === 1 ? 'pieza' : 'piezas'}
+                        </td>
+                        <td className="px-4 py-3 font-display font-bold text-sm text-ink">
+                          {formatMoney(v.total)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="inline-flex items-center rounded-full bg-forest/10 px-2 py-0.5 text-[10px] font-bold text-forest">
+                            Cobrado y entregado
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="h-8 text-xs gap-1.5"
+                            onClick={() => verTicketHistorial(v)}
+                            loading={loadingDetalleVenta}
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            Ver Ticket
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Alerta si la caja está cerrada */}
+          {!checkingCaja && !cajaAbierta && (
+            <Alert variant="warning">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-semibold text-ink">
+                    Se requiere turno de caja abierto para registrar ventas
+                  </p>
+                  <p className="text-xs text-muted mt-0.5">
+                    Por control interno, no se pueden realizar ventas en mostrador sin que el cajero tenga una caja activa donde ingresar los cobros.
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => setModalAbrirCaja(true)}
+                  className="shrink-0"
+                >
+                  <Wallet className="mr-1.5 h-4 w-4" />
+                  Abrir caja de turno
+                </Button>
+              </div>
+            </Alert>
+          )}
+
+          {/* Grid Principal: Catálogo a la izquierda, Ticket a la derecha */}
+          <div className="grid gap-5 lg:grid-cols-12 items-start">
         {/* Catálogo de Productos (7 columnas en desktop) */}
         <section className="lg:col-span-7 xl:col-span-8 space-y-4">
           {/* Barra de búsqueda y categorías */}
@@ -522,13 +840,14 @@ export default function PuntoVentaPage() {
                 type="button"
                 onClick={() => setCategoriaSel('')}
                 className={cn(
-                  'rounded-xl px-3 py-1.5 font-semibold transition whitespace-nowrap',
+                  'rounded-xl px-3 py-1.5 font-semibold transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer',
                   categoriaSel === ''
                     ? 'bg-clay text-white shadow-sm'
                     : 'bg-sand/80 text-muted hover:bg-sand hover:text-ink',
                 )}
               >
-                Todas las prendas
+                <TrendingUp className="h-3.5 w-3.5" />
+                Más vendidas
               </button>
               {categorias.map((cat) => (
                 <button
@@ -577,25 +896,24 @@ export default function PuntoVentaPage() {
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
               {productosFiltrados.map((item) => {
-                const stockNum = Number(item.stock_actual);
+                const stockNum = Number(item.stock_actual || 0);
                 const enCarrito = cart.find((c) => c.id_producto === item.id_producto);
                 const cantEnCarrito = enCarrito ? enCarrito.cantidad : 0;
                 const sinStock = stockNum <= 0;
-                const sinMasStock = cantEnCarrito >= stockNum;
+                const sinMasStock = stockNum > 0 && cantEnCarrito >= stockNum;
+                const deshabilitado = sinStock || sinMasStock;
 
                 return (
                   <button
                     key={item.id_inventario}
                     type="button"
-                    disabled={sinStock || sinMasStock}
+                    disabled={deshabilitado}
                     onClick={() => addToCart(item)}
                     className={cn(
                       'group relative flex flex-col justify-between rounded-2xl border text-left p-3.5 transition shadow-sm',
-                      sinStock
-                        ? 'border-line/60 bg-sand/30 opacity-60 cursor-not-allowed'
-                        : sinMasStock
-                          ? 'border-clay/40 bg-sand/50 cursor-not-allowed'
-                          : 'border-line bg-paper hover:border-clay hover:shadow-md cursor-pointer active:scale-[0.98]',
+                      deshabilitado
+                        ? 'border-line/60 bg-sand/40 opacity-60 cursor-not-allowed'
+                        : 'border-line bg-paper hover:border-clay hover:shadow-md cursor-pointer active:scale-[0.98]',
                     )}
                   >
                     <div>
@@ -611,7 +929,7 @@ export default function PuntoVentaPage() {
                                 : 'bg-forest/10 text-forest',
                           )}
                         >
-                          {sinStock ? 'Agotado' : `${stockNum} disp.`}
+                          {sinStock ? 'Sin stock' : `${stockNum} disp.`}
                         </span>
                       </div>
 
@@ -638,7 +956,15 @@ export default function PuntoVentaPage() {
                         {formatMoney(item.producto_precio)}
                       </span>
 
-                      {cantEnCarrito > 0 ? (
+                      {sinStock ? (
+                        <span className="text-[11px] font-bold text-danger">
+                          Agotado
+                        </span>
+                      ) : sinMasStock ? (
+                        <span className="rounded-full bg-sand px-2 py-0.5 text-[10px] font-bold text-muted">
+                          Máx. ({stockNum})
+                        </span>
+                      ) : cantEnCarrito > 0 ? (
                         <span className="flex h-6 w-6 items-center justify-center rounded-full bg-clay text-white text-xs font-bold shadow-sm">
                           {cantEnCarrito}
                         </span>
@@ -711,6 +1037,15 @@ export default function PuntoVentaPage() {
                       <p className="text-[11px] text-muted">
                         {item.color} · Talla {item.talla} · {formatMoney(item.precio)}
                       </p>
+                      {Number(item.stock_actual || 0) <= 0 ? (
+                        <p className="text-[10px] font-bold text-danger mt-0.5">
+                          ¡Sin stock disponible en sucursal!
+                        </p>
+                      ) : item.cantidad >= Number(item.stock_actual) ? (
+                        <p className="text-[10px] font-semibold text-muted mt-0.5">
+                          Máx. disponible alcanzado ({item.stock_actual} pz)
+                        </p>
+                      ) : null}
                     </div>
 
                     {/* Stepper de cantidad */}
@@ -729,18 +1064,20 @@ export default function PuntoVentaPage() {
 
                       <button
                         type="button"
-                        disabled={item.cantidad >= item.stock_actual}
+                        disabled={Number(item.stock_actual || 0) <= 0 || item.cantidad >= Number(item.stock_actual)}
                         onClick={() => updateQuantity(item.id_producto, item.cantidad + 1)}
                         className={cn(
                           'flex h-6 w-6 items-center justify-center rounded-lg border border-line',
-                          item.cantidad >= item.stock_actual
-                            ? 'bg-sand/40 opacity-40 cursor-not-allowed text-muted'
-                            : 'bg-sand hover:bg-line text-ink',
+                          Number(item.stock_actual || 0) <= 0 || item.cantidad >= Number(item.stock_actual)
+                            ? 'bg-sand/40 text-muted/30 cursor-not-allowed'
+                            : 'bg-sand hover:bg-line text-ink cursor-pointer',
                         )}
                         title={
-                          item.cantidad >= item.stock_actual
-                            ? `Stock máximo disponible (${item.stock_actual})`
-                            : 'Agregar otra pieza'
+                          Number(item.stock_actual || 0) <= 0
+                            ? 'Sin stock disponible'
+                            : item.cantidad >= Number(item.stock_actual)
+                              ? `Excede stock registrado (${item.stock_actual})`
+                              : 'Agregar otra pieza'
                         }
                       >
                         <Plus className="h-3 w-3" />
@@ -832,10 +1169,17 @@ export default function PuntoVentaPage() {
                 </span>
               </div>
 
+              {hayArticulosSinStock && (
+                <div className="flex items-center gap-2 rounded-xl bg-danger/10 border border-danger/20 p-2.5 text-xs font-semibold text-danger">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>Hay prendas sin stock en el ticket. Elimínalas para poder cobrar.</span>
+                </div>
+              )}
+
               <Button
                 size="lg"
                 variant="primary"
-                disabled={cart.length === 0 || !cajaAbierta}
+                disabled={cart.length === 0 || !cajaAbierta || hayArticulosSinStock}
                 onClick={abrirCobro}
                 className="w-full mt-2 h-12 text-base font-bold shadow-md"
               >
@@ -846,6 +1190,8 @@ export default function PuntoVentaPage() {
           </div>
         </section>
       </div>
+    </>
+  )}
 
       {/* Modal para Abrir Caja desde Punto de Venta */}
       <Modal
@@ -1085,7 +1431,7 @@ export default function PuntoVentaPage() {
                 clearCart();
               }}
             >
-              Cerrar y Nueva Venta
+              Cerrar
             </Button>
             <Button
               variant="primary"
@@ -1101,28 +1447,28 @@ export default function PuntoVentaPage() {
         {ticketVenta && (
           <div
             id="pos-ticket-print"
-            className="rounded-2xl border border-line bg-paper p-6 font-mono text-xs shadow-sm max-w-sm mx-auto space-y-4 print:border-none print:shadow-none print:p-0"
+            className="rounded-2xl border border-line bg-paper p-5 font-mono text-xs shadow-sm max-w-sm mx-auto space-y-3 print:border-none print:shadow-none print:p-0 print:space-y-1.5 print:text-[11px] print:w-[78mm] print:mx-auto"
           >
             {/* Cabecera */}
-            <div className="text-center space-y-1">
-              <p className="font-display font-extrabold text-base tracking-wider text-ink uppercase">
+            <div className="text-center space-y-0.5">
+              <p className="font-display font-extrabold text-sm tracking-wider text-ink uppercase">
                 ARTEXTILO
               </p>
               <p className="text-[10px] text-muted tracking-widest uppercase">
                 Hilando con amor
               </p>
-              <p className="text-[11px] font-semibold text-ink mt-1">
+              <p className="text-[11px] font-semibold text-ink mt-0.5">
                 {ticketVenta.sucursalNombre}
               </p>
               <p className="text-[10px] text-muted">
                 {formatDateTime(ticketVenta.fecha)}
               </p>
-              <p className="text-xs font-bold text-ink mt-1">
+              <p className="text-xs font-bold text-ink mt-0.5">
                 FOLIO: {ticketVenta.folio}
               </p>
             </div>
 
-            <div className="border-t border-dashed border-line my-2" />
+            <div className="border-t border-dashed border-line my-1.5 print:my-1" />
 
             {/* Datos de cliente y cajero */}
             <div className="text-[11px] space-y-0.5">
@@ -1134,27 +1480,27 @@ export default function PuntoVentaPage() {
               </p>
             </div>
 
-            <div className="border-t border-dashed border-line my-2" />
+            <div className="border-t border-dashed border-line my-1.5 print:my-1" />
 
             {/* Tabla de artículos */}
             <table className="w-full text-[11px]">
               <thead>
                 <tr className="border-b border-line text-muted">
-                  <th className="text-left py-1 font-semibold">Cant.</th>
-                  <th className="text-left py-1 font-semibold">Descripción</th>
-                  <th className="text-right py-1 font-semibold">P.U.</th>
-                  <th className="text-right py-1 font-semibold">Total</th>
+                  <th className="text-left py-0.5 font-semibold">Cant.</th>
+                  <th className="text-left py-0.5 font-semibold">Descripción</th>
+                  <th className="text-right py-0.5 font-semibold">P.U.</th>
+                  <th className="text-right py-0.5 font-semibold">Total</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line/40">
                 {ticketVenta.articulos.map((art, idx) => (
                   <tr key={idx}>
-                    <td className="py-1 font-bold">{art.cantidad}</td>
-                    <td className="py-1">
+                    <td className="py-0.5 font-bold">{art.cantidad}</td>
+                    <td className="py-0.5">
                       {art.nombre} ({art.talla}/{art.color})
                     </td>
-                    <td className="py-1 text-right">{formatMoney(art.precio)}</td>
-                    <td className="py-1 text-right font-bold">
+                    <td className="py-0.5 text-right">{formatMoney(art.precio)}</td>
+                    <td className="py-0.5 text-right font-bold">
                       {formatMoney(art.cantidad * art.precio)}
                     </td>
                   </tr>
@@ -1162,10 +1508,10 @@ export default function PuntoVentaPage() {
               </tbody>
             </table>
 
-            <div className="border-t border-dashed border-line my-2" />
+            <div className="border-t border-dashed border-line my-1.5 print:my-1" />
 
             {/* Totales */}
-            <div className="space-y-1 text-right text-[11px]">
+            <div className="space-y-0.5 text-right text-[11px]">
               <div className="flex justify-between">
                 <span className="text-muted">Subtotal:</span>
                 <span>{formatMoney(ticketVenta.subtotal)}</span>
@@ -1176,13 +1522,13 @@ export default function PuntoVentaPage() {
                   <span>-{formatMoney(ticketVenta.descuento)}</span>
                 </div>
               )}
-              <div className="flex justify-between font-bold text-sm text-ink pt-1 border-t border-line">
+              <div className="flex justify-between font-bold text-sm text-ink pt-0.5 border-t border-line">
                 <span>TOTAL:</span>
                 <span>{formatMoney(ticketVenta.total)}</span>
               </div>
             </div>
 
-            <div className="border-t border-dashed border-line my-2" />
+            <div className="border-t border-dashed border-line my-1.5 print:my-1" />
 
             {/* Forma de pago */}
             <div className="text-[11px] space-y-0.5">
@@ -1204,7 +1550,7 @@ export default function PuntoVentaPage() {
               )}
             </div>
 
-            <div className="text-center pt-3 border-t border-dashed border-line text-[10px] text-muted">
+            <div className="text-center pt-2 border-t border-dashed border-line text-[10px] text-muted print:pt-1">
               <p>¡Gracias por su compra!</p>
               <p className="mt-0.5">Conserve este ticket para cualquier cambio o aclaración.</p>
             </div>

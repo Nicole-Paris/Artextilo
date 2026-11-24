@@ -21,7 +21,6 @@ export const cajaOpenPayloadSchema = z.object({
     .positive('La sucursal debe ser un ID válido'),
   fondo_inicial: z.coerce
     .number({ error: 'El fondo inicial debe ser numérico' })
-    .int('El fondo inicial debe ser un número entero')
     .min(0, 'El fondo inicial no puede ser negativo')
     .default(0),
   id_empleado_apertura: z.coerce
@@ -42,7 +41,6 @@ export const cajaOpenPayloadSchema = z.object({
 export const cajaClosePayloadSchema = z.object({
   saldo_real: z.coerce
     .number({ error: 'El saldo real es obligatorio' })
-    .int('El saldo real debe ser un número entero')
     .min(0, 'El saldo real no puede ser negativo'),
   id_empleado_cierre: z.coerce
     .number()
