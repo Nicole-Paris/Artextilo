@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requireRole } from '../../middlewares/authMiddleware.js';
 import {
   destroy,
   index,
@@ -12,16 +13,19 @@ import {
 
 const router = Router();
 
-router.get('/', index);
-router.get('/stats', stats);
-router.get('/movimientos', movimientos);
-router.post('/movimientos', storeMovimiento);
+// Consultar inventario y registrar movimientos (Entradas para supervisor; cualquier movimiento para admin)
+router.get('/', requireRole('administrador', 'supervisor', 'gerente'), index);
+router.get('/stats', requireRole('administrador', 'supervisor', 'gerente'), stats);
+router.get('/movimientos', requireRole('administrador', 'supervisor', 'gerente'), movimientos);
+router.post('/movimientos', requireRole('administrador', 'supervisor', 'gerente'), storeMovimiento);
 
-router.get('/:id', show);
-router.post('/', store);
-router.patch('/:id/stock-minimo', updateMinimo);
-router.post('/:id/movimientos', storeMovimiento);
-router.delete('/:id', destroy);
+router.get('/:id', requireRole('administrador', 'supervisor', 'gerente'), show);
+router.post('/:id/movimientos', requireRole('administrador', 'supervisor', 'gerente'), storeMovimiento);
+
+// Gestión estructural de inventario (solo administrador)
+router.post('/', requireRole('administrador'), store);
+router.patch('/:id/stock-minimo', requireRole('administrador'), updateMinimo);
+router.delete('/:id', requireRole('administrador'), destroy);
 
 export default router;
 

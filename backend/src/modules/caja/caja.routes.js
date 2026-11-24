@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requireRole } from '../../middlewares/authMiddleware.js';
 import {
   abierta,
   cerrar,
@@ -12,9 +13,11 @@ const router = Router();
 
 router.get('/', index);
 router.get('/abierta', abierta);
-router.post('/abrir', store);
 router.get('/:id/pagos', pagos);
 router.get('/:id', show);
-router.post('/:id/cerrar', cerrar);
+
+// Solo administrador y supervisor pueden abrir y cerrar cajas
+router.post('/abrir', requireRole('administrador', 'supervisor', 'gerente'), store);
+router.post('/:id/cerrar', requireRole('administrador', 'supervisor', 'gerente'), cerrar);
 
 export default router;

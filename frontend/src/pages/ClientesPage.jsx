@@ -22,6 +22,7 @@ import { cn } from '../lib/cn.js';
 const EMPTY_FORM = {
   nombre: '',
   apellido_paterno: '',
+  apellido_materno: '',
   telefono: '',
   correo: '',
   direccion: '',
@@ -38,7 +39,7 @@ const EMPTY_TOUCHED = Object.fromEntries(
 );
 
 function fullName(cliente) {
-  return [cliente.nombre, cliente.apellido_paterno]
+  return [cliente.nombre, cliente.apellido_paterno, cliente.apellido_materno]
     .filter(Boolean)
     .join(' ');
 }
@@ -47,6 +48,7 @@ function formFromCliente(cliente) {
   return {
     nombre: cliente.nombre ?? '',
     apellido_paterno: cliente.apellido_paterno ?? '',
+    apellido_materno: cliente.apellido_materno ?? '',
     telefono: cliente.telefono ?? '',
     correo: cliente.correo ?? '',
     direccion: cliente.direccion ?? '',
@@ -72,6 +74,10 @@ function validateForm(form) {
     errors.apellido_paterno = 'El apellido paterno es obligatorio';
   } else if (form.apellido_paterno.trim().length > 45) {
     errors.apellido_paterno = 'El apellido paterno no puede exceder 45 caracteres';
+  }
+
+  if (form.apellido_materno && form.apellido_materno.trim().length > 45) {
+    errors.apellido_materno = 'El apellido materno no puede exceder 45 caracteres';
   }
 
   if (!/^\d{10,15}$/.test(form.telefono)) {
@@ -227,6 +233,7 @@ export default function ClientesPage() {
     !editing ||
     form.nombre !== initialForm.nombre ||
     form.apellido_paterno !== initialForm.apellido_paterno ||
+    form.apellido_materno !== initialForm.apellido_materno ||
     form.telefono !== initialForm.telefono ||
     form.correo !== initialForm.correo ||
     form.direccion !== initialForm.direccion ||
@@ -250,6 +257,7 @@ export default function ClientesPage() {
       ...form,
       nombre: form.nombre.trim(),
       apellido_paterno: form.apellido_paterno.trim(),
+      apellido_materno: form.apellido_materno?.trim() || null,
       telefono: form.telefono.trim(),
       correo: form.correo.trim(),
       direccion: form.direccion.trim(),
@@ -568,6 +576,25 @@ export default function ClientesPage() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label="Apellido materno"
+              htmlFor="cliente-apellido-materno"
+              error={visibleFieldErrors.apellido_materno}
+            >
+              <input
+                id="cliente-apellido-materno"
+                data-field="apellido_materno"
+                type="text"
+                value={form.apellido_materno}
+                onChange={(event) => updateField('apellido_materno', event.target.value)}
+                onBlur={() => markTouched('apellido_materno')}
+                className={inputClass(visibleFieldErrors.apellido_materno)}
+                maxLength={45}
+                autoComplete="additional-name"
+                placeholder="Apellido materno"
+              />
+            </Field>
+
             <Field
               label="Teléfono"
               htmlFor="cliente-telefono"

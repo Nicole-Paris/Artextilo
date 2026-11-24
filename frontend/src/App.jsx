@@ -30,6 +30,16 @@ function PageLoading() {
   );
 }
 
+function HomeRoute() {
+  const datos = localStorage.getItem('artextilo_empleado');
+  const empleado = datos ? JSON.parse(datos) : null;
+  const rol = String(empleado?.rol || '').trim().toLowerCase();
+  if (['administrador', 'admin'].includes(rol)) {
+    return <Dashboard />;
+  }
+  return <Navigate to="/pos" replace />;
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
@@ -39,21 +49,31 @@ export default function App() {
 
           <Route element={<ProtectedRoute />}>
             <Route element={<Layout />}>
-              <Route index element={<Dashboard />} />
+              {/* Inicio exclusivo para Administrador; Supervisor y Empleados se redirigen a /pos */}
+              <Route index element={<HomeRoute />} />
               <Route path="inicio" element={<Navigate to="/" replace />} />
               <Route path="pos" element={<PuntoVentaPage />} />
               <Route path="punto-de-venta" element={<Navigate to="/pos" replace />} />
               <Route path="clientes" element={<ClientesPage />} />
-              <Route path="empleados" element={<Navigate to="/sucursales" replace />} />
-              <Route path="sucursales" element={<SucursalesPage />} />
-              <Route path="categorias" element={<Navigate to="/productos?tab=categorias" replace />} />
-              <Route path="productos" element={<ProductosPage />} />
-              <Route path="inventario" element={<InventarioPage />} />
-              <Route path="caja" element={<CajaPage />} />
               <Route path="pedidos" element={<PedidosPage />} />
-              <Route path="reportes" element={<ReportesPage />} />
               <Route path="devoluciones" element={<Navigate to="/pedidos?tab=devoluciones" replace />} />
-              <Route path="global-values" element={<GlobalValuesPage />} />
+
+              {/* Rutas permitidas para Supervisor y Administrador */}
+              <Route element={<ProtectedRoute allowedRoles={['administrador', 'admin', 'supervisor', 'gerente']} />}>
+                <Route path="inventario" element={<InventarioPage />} />
+                <Route path="caja" element={<CajaPage />} />
+              </Route>
+
+              {/* Rutas exclusivas del Administrador */}
+              <Route element={<ProtectedRoute allowedRoles={['administrador', 'admin']} />}>
+                <Route path="empleados" element={<Navigate to="/sucursales" replace />} />
+                <Route path="sucursales" element={<SucursalesPage />} />
+                <Route path="categorias" element={<Navigate to="/productos?tab=categorias" replace />} />
+                <Route path="productos" element={<ProductosPage />} />
+                <Route path="reportes" element={<ReportesPage />} />
+                <Route path="global-values" element={<GlobalValuesPage />} />
+              </Route>
+
               <Route path="*" element={<NotFound />} />
             </Route>
           </Route>

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requireRole } from '../../middlewares/authMiddleware.js';
 import {
   destroy,
   index,
@@ -9,10 +10,13 @@ import {
 
 const router = Router();
 
+// Consulta permitida para todos (POS)
 router.get('/', index);
 router.get('/:id', show);
-router.post('/', store);
-router.put('/:id', update);
-router.delete('/:id', destroy);
+
+// Modificación solo administrador
+router.post('/', requireRole('administrador'), store);
+router.put('/:id', requireRole('administrador'), update);
+router.delete('/:id', requireRole('administrador'), destroy);
 
 export default router;

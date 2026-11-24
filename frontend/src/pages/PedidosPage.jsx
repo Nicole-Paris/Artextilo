@@ -30,7 +30,7 @@ import { sucursalesApi } from '../api/sucursales.js';
 import { useDebouncedValue } from '../hooks/useDebouncedValue.js';
 import { cn } from '../lib/cn.js';
 import { formatDateTime, formatMoney } from '../lib/format.js';
-import { isCashier } from '../lib/roles.js';
+import { isCashier, isSupervisorOrAdmin } from '../lib/roles.js';
 
 const MAYOREO_MINIMO = 12;
 const MAYOREO_PORCENTAJE = 10;
@@ -256,7 +256,18 @@ function TotalsPanel({ totals }) {
 
 export default function PedidosPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = searchParams.get('tab') === 'devoluciones' ? 'devoluciones' : 'pedidos';
+
+  const empleadoActual = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem('artextilo_empleado') || '{}');
+    } catch {
+      return {};
+    }
+  }, []);
+
+  const canDevoluciones = isSupervisorOrAdmin(empleadoActual);
+  const rawTab = searchParams.get('tab') === 'devoluciones' ? 'devoluciones' : 'pedidos';
+  const activeTab = canDevoluciones && rawTab === 'devoluciones' ? 'devoluciones' : 'pedidos';
 
   const setTab = (tab) => {
     const next = new URLSearchParams(searchParams);
@@ -313,6 +324,7 @@ export default function PedidosPage() {
   const [quickClienteForm, setQuickClienteForm] = useState({
     nombre: '',
     apellido_paterno: '',
+    apellido_materno: '',
     telefono: '',
     direccion: '',
     correo: '',
@@ -817,6 +829,7 @@ export default function PedidosPage() {
     setQuickClienteForm({
       nombre: createForm.cliente_texto?.split(' ')[0] || '',
       apellido_paterno: '',
+      apellido_materno: '',
       telefono: '',
       direccion: 'Venta mostrador / Sin dirección',
       correo: '',
@@ -848,6 +861,7 @@ export default function PedidosPage() {
       const resp = await clientesApi.create({
         nombre: quickClienteForm.nombre.trim(),
         apellido_paterno: quickClienteForm.apellido_paterno.trim(),
+        apellido_materno: quickClienteForm.apellido_materno?.trim() || null,
         telefono: quickClienteForm.telefono.trim(),
         direccion: quickClienteForm.direccion.trim() || 'Sin dirección',
         correo: quickClienteForm.correo.trim() || null,
@@ -1375,7 +1389,8 @@ export default function PedidosPage() {
     !['cancelado', 'entregado'].includes(pedido.estado);
   const puedeCancelar = (pedido) =>
     !['cancelado', 'entregado'].includes(pedido.estado);
-  const puedeDevolver = (pedido) => pedido.estado !== 'cancelado';
+  const puedeDevolver = (pedido) =>
+    canDevoluciones && pedido.estado !== 'cancelado';
 
   const abrirDevolucion = (pedido) => {
     cerrarDetalle();
@@ -1407,19 +1422,21 @@ export default function PedidosPage() {
           </span>
         </button>
 
-        <button
-          type="button"
-          onClick={() => setTab('devoluciones')}
-          className={cn(
-            'flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-semibold transition',
-            activeTab === 'devoluciones'
-              ? 'border-forest text-forest'
-              : 'border-transparent text-muted hover:text-ink',
-          )}
-        >
-          <RotateCcw className="h-4 w-4" />
-          <span>Devoluciones</span>
-        </button>
+        {canDevoluciones && (
+          <button
+            type="button"
+            onClick={() => setTab('devoluciones')}
+            className={cn(
+              'flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-semibold transition',
+              activeTab === 'devoluciones'
+                ? 'border-forest text-forest'
+                : 'border-transparent text-muted hover:text-ink',
+            )}
+          >
+            <RotateCcw className="h-4 w-4" />
+            <span>Devoluciones</span>
+          </button>
+        )}
       </div>
 
       {activeTab === 'pedidos' ? (
@@ -2440,14 +2457,24 @@ export default function PedidosPage() {
               <p className="text-xs text-muted">Verificando caja abierta…</p>
             ) : !cajaAbierta ? (
               <Alert>
-                <p className="font-semibold">No hay una caja abierta para el turno actual.</p>
-                <p className="mt-1">
-                  Abre una caja en{' '}
-                  <Link to="/caja" className="font-semibold underline">
-                    Corte de caja
-                  </Link>
-                  {' '}para registrar el anticipo.
+                <p className="font-semibold">
+                  {isSupervisorOrAdmin(empleadoActual)
+                    ? 'No hay una caja abierta para el turno actual.'
+                    : 'Sin caja asignada para registrar cobros.'}
                 </p>
+                {isSupervisorOrAdmin(empleadoActual) ? (
+                  <p className="mt-1">
+                    Abre una caja en{' '}
+                    <Link to="/caja" className="font-semibold underline">
+                      Corte de caja
+                    </Link>{' '}
+                    para registrar el anticipo.
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-muted">
+                    No tienes una caja asignada y abierta. Espera a que tu supervisor o administrador te asigne y abra una caja para poder ingresar anticipos.
+                  </p>
+                )}
               </Alert>
             ) : cajaAbierta ? (
               <p className="text-xs text-forest">
@@ -2783,14 +2810,24 @@ export default function PedidosPage() {
 
             {!pagoCaja && (
               <Alert>
-                <p className="font-semibold">No tienes una caja abierta.</p>
-                <p className="mt-1">
-                  Abre una caja en{' '}
-                  <Link to="/caja" className="font-semibold underline">
-                    Corte de caja
-                  </Link>{' '}
-                  antes de cobrar.
+                <p className="font-semibold">
+                  {isSupervisorOrAdmin(empleadoActual)
+                    ? 'No hay una caja abierta.'
+                    : 'Sin caja asignada para cobrar.'}
                 </p>
+                {isSupervisorOrAdmin(empleadoActual) ? (
+                  <p className="mt-1">
+                    Abre una caja en{' '}
+                    <Link to="/caja" className="font-semibold underline">
+                      Corte de caja
+                    </Link>{' '}
+                    antes de cobrar.
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-muted">
+                    No tienes una caja asignada y abierta. Espera a que tu supervisor o administrador te asigne y abra una caja para poder registrar pagos.
+                  </p>
+                )}
               </Alert>
             )}
 
@@ -3059,27 +3096,38 @@ export default function PedidosPage() {
               />
             </Field>
 
-            <Field
-              label="Monto a devolver"
-              htmlFor="cancelar-monto"
-              hint="Puede ser 0 si no se devolverá dinero."
-            >
-              <input
-                id="cancelar-monto"
-                type="number"
-                min="0"
-                max={cancelTarget.total_pagado}
-                step="1"
-                className={inputClass()}
-                value={cancelForm.monto_devolucion}
-                onChange={(event) =>
-                  setCancelForm((current) => ({
-                    ...current,
-                    monto_devolucion: event.target.value,
-                  }))
-                }
-              />
-            </Field>
+            {canDevoluciones ? (
+              <Field
+                label="Monto a devolver"
+                htmlFor="cancelar-monto"
+                hint="Puede ser 0 si no se devolverá dinero."
+              >
+                <input
+                  id="cancelar-monto"
+                  type="number"
+                  min="0"
+                  max={cancelTarget.total_pagado}
+                  step="0.01"
+                  className={inputClass()}
+                  value={cancelForm.monto_devolucion}
+                  onChange={(event) =>
+                    setCancelForm((current) => ({
+                      ...current,
+                      monto_devolucion: event.target.value,
+                    }))
+                  }
+                />
+              </Field>
+            ) : (
+              Number(cancelTarget.total_pagado) > 0 && (
+                <div className="rounded-xl border border-sand-dark/60 bg-sand/30 p-3 text-xs text-muted">
+                  <p className="font-semibold text-ink">Devolución monetaria no permitida</p>
+                  <p>
+                    Puedes cancelar el pedido, pero para autorizar la devolución de los ${formatMoney(cancelTarget.total_pagado)} pagados se requiere un Administrador o Supervisor.
+                  </p>
+                </div>
+              )
+            )}
 
             {Number(cancelForm.monto_devolucion) > 0 && (
               <>
@@ -3193,6 +3241,19 @@ export default function PedidosPage() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Apellido materno" htmlFor="quick-apellido-materno">
+              <input
+                id="quick-apellido-materno"
+                type="text"
+                className={inputClass()}
+                value={quickClienteForm.apellido_materno}
+                onChange={(e) =>
+                  setQuickClienteForm((prev) => ({ ...prev, apellido_materno: e.target.value }))
+                }
+                placeholder="Apellido materno"
+              />
+            </Field>
+
             <Field label="Teléfono" htmlFor="quick-telefono" hint="10 dígitos numéricos" required>
               <input
                 id="quick-telefono"

@@ -174,10 +174,11 @@ export async function updateEmpleado(id, payload, userId = null) {
   } = payload;
 
   await ensureCorreoAvailable(correo, id);
-  const idSucursalFinal = await validateReferences(
-    id_rol,
-    id_sucursal ?? current.id_sucursal,
-  );
+
+  if (id_sucursal && Number(id_sucursal) !== Number(current.id_sucursal)) {
+    throw ApiError.forbidden('No está permitido transferir o reasignar empleados entre sucursales');
+  }
+  const idSucursalFinal = current.id_sucursal;
 
   const horarioEntradaFinal = horario_entrada ?? current.horario_entrada;
   const horarioSalidaFinal = horario_salida ?? current.horario_salida;
@@ -232,15 +233,8 @@ export async function updateEstadoEmpleado(id, estado, userId = null) {
   return getEmpleado(id);
 }
 
-export async function updateSucursalEmpleado(id, id_sucursal, userId = null) {
-  await getEmpleado(id);
-  const idSucursalFinal = await resolveSucursal(id_sucursal);
-  await pool.execute('UPDATE empleado SET id_sucursal = ?, updated_by = ? WHERE id_empleado = ?', [
-    idSucursalFinal,
-    userId || null,
-    id,
-  ]);
-  return getEmpleado(id);
+export async function updateSucursalEmpleado() {
+  throw ApiError.forbidden('No está permitido transferir o reasignar empleados entre sucursales');
 }
 
 export async function archiveEmpleado(id, userId = null) {

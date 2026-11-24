@@ -90,36 +90,20 @@ export async function loginEmpleado({ correo, contrasena }) {
     id_sucursal: empleado.id_sucursal,
   });
 
-  // Obtener las sucursales asignadas al empleado (o todas las activas si es administrador o supervisor)
+  // Solo el administrador tiene acceso a entrar o cambiar entre todas las sucursales con las mismas credenciales
   let sucursalesAsignadas = [];
-  const tieneAccesoTodas = ['administrador', 'admin', 'supervisor'].includes(
+  const esAdmin = ['administrador', 'admin'].includes(
     String(empleado.rol || '').trim().toLowerCase()
   );
 
-  if (tieneAccesoTodas) {
+  if (esAdmin) {
     const [todasSucursales] = await pool.execute(
-      `SELECT id_sucursal, nombre FROM sucursal WHERE deleted_at IS NULL AND estado = 'activa' ORDER BY nombre ASC`
+      `SELECT id_sucursal, nombre, estado FROM sucursal WHERE deleted_at IS NULL AND (estado = 'activa' OR estado IS NULL) ORDER BY nombre ASC`
     );
     sucursalesAsignadas = todasSucursales;
   } else {
-    // Si tiene la tabla sucursal_empleado o sucursales múltiples
-    try {
-      const [sucursalesEmp] = await pool.execute(
-        `SELECT s.id_sucursal, s.nombre 
-         FROM sucursal_empleado se
-         INNER JOIN sucursal s ON s.id_sucursal = se.id_sucursal
-         WHERE se.id_empleado = ? AND s.deleted_at IS NULL AND s.estado = 'activa'
-         ORDER BY s.nombre ASC`,
-        [empleado.id_empleado]
-      );
-      if (sucursalesEmp.length > 0) {
-        sucursalesAsignadas = sucursalesEmp;
-      }
-    } catch {
-      // Si no existe la tabla relacional, se toma la sucursal directa
-    }
-
-    if (sucursalesAsignadas.length === 0 && empleado.id_sucursal) {
+    // Supervisor y empleados quedan asignados exclusivamente a su sucursal fija
+    if (empleado.id_sucursal) {
       sucursalesAsignadas = [{ id_sucursal: empleado.id_sucursal, nombre: empleado.sucursal }];
     }
   }

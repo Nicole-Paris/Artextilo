@@ -65,6 +65,11 @@ export async function storeMovimiento(req, res) {
     id_inventario,
   });
 
+  const userRole = String(req.user?.rol || '').trim().toLowerCase();
+  if (userRole === 'supervisor' && payload.tipo !== 'entrada') {
+    throw ApiError.forbidden('Los supervisores solo tienen permiso para registrar entradas de mercancía');
+  }
+
   const data = await registerMovimiento(payload, req.user?.id_empleado);
   res.status(201).json({
     success: true,

@@ -59,7 +59,12 @@ export default function LoginPage() {
       }
       localStorage.setItem('artextilo_empleado', JSON.stringify(response.data));
 
-      navigate('/', { replace: true });
+      const rol = String(response.data.rol || '').trim().toLowerCase();
+      if (['administrador', 'admin'].includes(rol)) {
+        navigate('/', { replace: true });
+      } else {
+        navigate('/pos', { replace: true });
+      }
     } catch (err) {
       setError(err.message || 'No fue posible iniciar sesión.');
     } finally {

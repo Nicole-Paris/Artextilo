@@ -2,7 +2,7 @@ import { pool } from '../../config/db.js';
 import { ApiError } from '../../lib/ApiError.js';
 
 const BASE_SELECT = `
-  SELECT id_sucursal, nombre, direccion, ciudad, estado_republica, codigo_postal, telefono, horario,
+  SELECT id_sucursal, nombre, direccion, ciudad, estado_republica, codigo_postal, telefono, horario, estado,
          created_at, updated_at, deleted_at
   FROM sucursal
 `;
@@ -71,7 +71,6 @@ export async function createSucursal(payload, userId = null) {
     codigo_postal,
     telefono,
     horario,
-    empleados_ids = [],
   } = payload;
 
   const [existing] = await pool.execute(
@@ -103,16 +102,6 @@ export async function createSucursal(payload, userId = null) {
     );
 
     const idSucursal = result.insertId;
-
-    if (Array.isArray(empleados_ids) && empleados_ids.length > 0) {
-      // Asignar los empleados seleccionados a esta nueva sucursal
-      for (const idEmpleado of empleados_ids) {
-        await connection.execute(
-          `UPDATE empleado SET id_sucursal = ?, updated_at = NOW(), updated_by = ? WHERE id_empleado = ? AND deleted_at IS NULL`,
-          [idSucursal, userId || null, idEmpleado],
-        );
-      }
-    }
 
     // Inicializar automáticamente el inventario de esta nueva sucursal con todos los productos activos
     await connection.execute(

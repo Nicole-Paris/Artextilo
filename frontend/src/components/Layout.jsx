@@ -38,18 +38,19 @@ import Alert from './Alert.jsx';
 import { cn } from '../lib/cn.js';
 import { useDialogFocus } from '../hooks/useDialogFocus.js';
 import Modal from './Modal.jsx';
+import { normalizeRole } from '../lib/roles.js';
 
 const navigation = [
-  { to: '/', label: 'Inicio', icon: LayoutDashboard, end: true },
+  { to: '/', label: 'Inicio', icon: LayoutDashboard, end: true, roles: ['administrador', 'admin'] },
   { to: '/pos', label: 'Punto de venta', icon: ShoppingBag },
   { to: '/pedidos', label: 'Pedidos', icon: Receipt },
-  { to: '/reportes', label: 'Reportes', icon: BarChart3 },
   { to: '/clientes', label: 'Clientes', icon: Contact },
-  { to: '/sucursales', label: 'Sucursales', icon: Store },
-  { to: '/productos', label: 'Productos', icon: Package },
-  { to: '/inventario', label: 'Inventario', icon: Boxes },
-  { to: '/caja', label: 'Corte de caja', icon: Wallet },
-  { to: '/global-values', label: 'Valores Globales', icon: Settings },
+  { to: '/inventario', label: 'Inventario', icon: Boxes, roles: ['administrador', 'admin', 'supervisor', 'gerente'] },
+  { to: '/caja', label: 'Corte de caja', icon: Wallet, roles: ['administrador', 'admin', 'supervisor', 'gerente'] },
+  { to: '/reportes', label: 'Reportes', icon: BarChart3, roles: ['administrador', 'admin'] },
+  { to: '/sucursales', label: 'Sucursales', icon: Store, roles: ['administrador', 'admin'] },
+  { to: '/productos', label: 'Productos', icon: Package, roles: ['administrador', 'admin'] },
+  { to: '/global-values', label: 'Valores Globales', icon: Settings, roles: ['administrador', 'admin'] },
 ];
 
 const routeTitles = {
@@ -65,11 +66,17 @@ const routeTitles = {
   '/global-values': 'Valores Globales',
 };
 
-function SidebarContent({ onNavigate, logoUrl }) {
+function SidebarContent({ onNavigate, logoUrl, rol }) {
+  const userRole = normalizeRole(rol);
+  const items = navigation.filter((item) => {
+    if (!item.roles) return true;
+    return item.roles.map(normalizeRole).includes(userRole);
+  });
+
   return (
     <>
       <Link
-        to="/"
+        to={['administrador', 'admin'].includes(userRole) ? '/' : '/pos'}
         onClick={onNavigate}
         className="flex flex-col items-center justify-center py-5 px-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cream"
       >
@@ -96,7 +103,7 @@ function SidebarContent({ onNavigate, logoUrl }) {
         </p>
 
         <div className="space-y-1">
-          {navigation.map(({ to, label, icon: Icon, end }) => (
+          {items.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}
@@ -187,30 +194,44 @@ export default function Layout() {
       setEmpleado(emp);
 
       if (emp) {
-        // Cargar sucursales si tiene lista en su perfil o si es admin / tiene acceso a varias
-        if (Array.isArray(emp.sucursales) && emp.sucursales.length > 0) {
-          setSucursalesDisponibles(emp.sucursales);
-        } else {
-          // Intentar obtener las sucursales del sistema
+        const rol = String(emp.rol || '').toLowerCase();
+        const esAdmin = rol.includes('admin');
+
+        // Para el administrador, siempre consultar sucursalesApi.list() para tener la lista completa y fresca
+        if (esAdmin) {
           sucursalesApi
             .list()
             .then((list) => {
               const rawList = Array.isArray(list) ? list : (list?.data || []);
               if (Array.isArray(rawList)) {
-                const activas = rawList.filter((s) => s.estado === 'activa');
-                // Si el usuario es admin o supervisor, tiene acceso a todas las activas
-                const rol = String(emp.rol || '').toLowerCase();
-                if (rol.includes('admin') || rol.includes('supervisor') || rol.includes('gerente')) {
-                  setSucursalesDisponibles(activas);
-                } else if (emp.sucursales && emp.sucursales.length > 0) {
-                  setSucursalesDisponibles(emp.sucursales);
-                } else if (emp.id_sucursal) {
-                  const actual = activas.find((s) => Number(s.id_sucursal) === Number(emp.id_sucursal));
-                  if (actual) setSucursalesDisponibles([actual]);
+                const activas = rawList.filter((s) => !s.estado || s.estado === 'activa');
+                setSucursalesDisponibles(activas);
+
+                // Si no tiene sucursal asignada o la actual no está entre las activas, sincronizar con la primera
+                if (activas.length > 0 && !activas.some((s) => Number(s.id_sucursal) === Number(emp.id_sucursal))) {
+                  const updated = {
+                    ...emp,
+                    id_sucursal: activas[0].id_sucursal,
+                    sucursal: activas[0].nombre,
+                    sucursales: activas,
+                  };
+                  localStorage.setItem('artextilo_empleado', JSON.stringify(updated));
+                  setEmpleado(updated);
+                } else {
+                  const updated = { ...emp, sucursales: activas };
+                  localStorage.setItem('artextilo_empleado', JSON.stringify(updated));
+                  setEmpleado(updated);
                 }
               }
             })
-            .catch(() => {});
+            .catch(() => {
+              if (Array.isArray(emp.sucursales) && emp.sucursales.length > 0) {
+                setSucursalesDisponibles(emp.sucursales);
+              }
+            });
+        } else if (emp.id_sucursal) {
+          const actual = { id_sucursal: emp.id_sucursal, nombre: emp.sucursal };
+          setSucursalesDisponibles([actual]);
         }
       }
     } catch {
@@ -222,6 +243,9 @@ export default function Layout() {
   }, [navigate]);
 
   function handleCambioSucursal(e) {
+    const rol = String(empleado?.rol || '').toLowerCase();
+    if (!rol.includes('admin')) return;
+
     const nuevoId = Number(e.target.value);
     const sucursalSel = sucursalesDisponibles.find((s) => Number(s.id_sucursal) === nuevoId);
     if (!sucursalSel || !empleado) return;
@@ -234,8 +258,8 @@ export default function Layout() {
 
     localStorage.setItem('artextilo_empleado', JSON.stringify(updated));
     setEmpleado(updated);
-    // Notificar o recargar para sincronizar inventario, cortes de caja y pedidos
     window.dispatchEvent(new Event('storage'));
+    window.location.reload();
   }
 
   function handleLogout() {
@@ -389,7 +413,7 @@ export default function Layout() {
       </a>
 
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col bg-forest lg:flex print:hidden">
-        <SidebarContent logoUrl={logoUrl} />
+        <SidebarContent logoUrl={logoUrl} rol={empleado?.rol} />
       </aside>
 
       {sidebarOpen && (
@@ -422,6 +446,7 @@ export default function Layout() {
             <SidebarContent
               onNavigate={() => setSidebarOpen(false)}
               logoUrl={logoUrl}
+              rol={empleado?.rol}
             />
           </aside>
         </div>

@@ -52,6 +52,8 @@ export default function PuntoVentaPage() {
 
   const idEmpleado = session?.id_empleado ? Number(session.id_empleado) : null;
   const idSucursal = session?.id_sucursal ? Number(session.id_sucursal) : null;
+  const userRole = String(session?.rol || '').trim().toLowerCase();
+  const puedeGestionarCaja = ['administrador', 'admin', 'supervisor', 'gerente'].includes(userRole);
 
   // Estado de caja
   const [cajaAbierta, setCajaAbierta] = useState(null);
@@ -582,25 +584,34 @@ export default function PuntoVentaPage() {
             <div className="flex items-center gap-2 rounded-xl bg-forest/10 px-3 py-1.5 text-xs font-semibold text-forest">
               <CheckCircle2 className="h-4 w-4" />
               <span>Caja abierta (Corte #{cajaAbierta.id_corte_caja})</span>
-              <Link
-                to="/caja"
-                className="ml-1 underline opacity-80 hover:opacity-100"
-              >
-                Ver caja
-              </Link>
+              {puedeGestionarCaja && (
+                <Link
+                  to="/caja"
+                  className="ml-1 underline opacity-80 hover:opacity-100"
+                >
+                  Ver caja
+                </Link>
+              )}
             </div>
           ) : (
-            <div className="flex items-center gap-2 rounded-xl bg-danger/10 px-3 py-1.5 text-xs font-semibold text-danger">
+            <div
+              className={cn(
+                'flex items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-semibold',
+                puedeGestionarCaja ? 'bg-danger/10 text-danger' : 'bg-amber-500/10 text-amber-800',
+              )}
+            >
               <AlertCircle className="h-4 w-4" />
-              <span>Caja cerrada en este turno</span>
-              <Button
-                size="sm"
-                variant="primary"
-                className="h-7 text-xs bg-danger hover:bg-danger-strong border-none text-white px-2.5"
-                onClick={() => setModalAbrirCaja(true)}
-              >
-                Abrir caja
-              </Button>
+              <span>{puedeGestionarCaja ? 'Caja cerrada' : 'Sin caja asignada'}</span>
+              {puedeGestionarCaja && (
+                <Button
+                  size="sm"
+                  variant="primary"
+                  className="h-7 text-xs bg-danger hover:bg-danger-strong border-none text-white px-2.5"
+                  onClick={() => setModalAbrirCaja(true)}
+                >
+                  Abrir caja
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -786,24 +797,30 @@ export default function PuntoVentaPage() {
         <>
           {/* Alerta si la caja está cerrada */}
           {!checkingCaja && !cajaAbierta && (
-            <Alert variant="warning">
+            <Alert variant={puedeGestionarCaja ? 'warning' : 'info'}>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="font-semibold text-ink">
-                    Se requiere turno de caja abierto para registrar ventas
+                    {puedeGestionarCaja
+                      ? 'Se requiere turno de caja abierto para registrar ventas'
+                      : 'Esperando asignación y apertura de caja'}
                   </p>
                   <p className="text-xs text-muted mt-0.5">
-                    Por control interno, no se pueden realizar ventas en mostrador sin que el cajero tenga una caja activa donde ingresar los cobros.
+                    {puedeGestionarCaja
+                      ? 'Por control interno, no se pueden realizar ventas en mostrador sin que se tenga una caja activa donde ingresar los cobros.'
+                      : 'No tienes una caja asignada y abierta. Debes esperar a que tu supervisor o administrador te asigne y abra una caja para poder operar en mostrador.'}
                   </p>
                 </div>
-                <Button
-                  size="sm"
-                  onClick={() => setModalAbrirCaja(true)}
-                  className="shrink-0"
-                >
-                  <Wallet className="mr-1.5 h-4 w-4" />
-                  Abrir caja de turno
-                </Button>
+                {puedeGestionarCaja && (
+                  <Button
+                    size="sm"
+                    onClick={() => setModalAbrirCaja(true)}
+                    className="shrink-0"
+                  >
+                    <Wallet className="mr-1.5 h-4 w-4" />
+                    Abrir caja de turno
+                  </Button>
+                )}
               </div>
             </Alert>
           )}

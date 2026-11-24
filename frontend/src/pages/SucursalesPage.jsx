@@ -11,7 +11,6 @@ import {
   Store,
   Users,
   UserPlus,
-  UserCheck,
   UserRoundCheck,
   UserRoundX,
   Eye,
@@ -41,7 +40,6 @@ const EMPTY_FORM = {
   codigo_postal: '',
   telefono: '',
   horario: '',
-  empleados_ids: [],
 };
 
 const EMPTY_EMPLEADO_FORM = {
@@ -88,13 +86,6 @@ export default function SucursalesPage() {
   const [empleadoError, setEmpleadoError] = useState('');
   const [savingEmpleado, setSavingEmpleado] = useState(false);
   const [showPass, setShowPass] = useState(false);
-
-  // Modal para asignar empleados registrados a la sucursal seleccionada
-  const [asignarModalOpen, setAsignarModalOpen] = useState(false);
-  const [selectedEmpIds, setSelectedEmpIds] = useState([]);
-  const [searchEmpExistente, setSearchEmpExistente] = useState('');
-  const [savingAsignacion, setSavingAsignacion] = useState(false);
-  const [asignarError, setAsignarError] = useState('');
 
   // Para cambio de estado (activar / desactivar empleado)
   const [estadoTarget, setEstadoTarget] = useState(null);
@@ -148,65 +139,6 @@ export default function SucursalesPage() {
       if (encontrada) setSucursalSeleccionada(encontrada);
     }
   }, [sucursales, sucursalSeleccionada]);
-
-  const empleadosDisponiblesParaAsignar = useMemo(() => {
-    if (!sucursalSeleccionada) return [];
-    const idActual = Number(sucursalSeleccionada.id_sucursal);
-    const ajenos = listaEmpleados.filter((emp) => Number(emp.id_sucursal) !== idActual);
-    const q = searchEmpExistente.trim().toLowerCase();
-    if (!q) return ajenos;
-    return ajenos.filter((emp) => {
-      const full = `${emp.nombre || ''} ${emp.apellido_paterno || ''} ${emp.apellido_materno || ''}`.toLowerCase();
-      const rol = String(emp.rol || '').toLowerCase();
-      const correo = String(emp.correo || '').toLowerCase();
-      const sucursal = String(emp.sucursal || '').toLowerCase();
-      return full.includes(q) || rol.includes(q) || correo.includes(q) || sucursal.includes(q);
-    });
-  }, [listaEmpleados, sucursalSeleccionada, searchEmpExistente]);
-
-  function abrirModalAsignarExistente() {
-    setSelectedEmpIds([]);
-    setSearchEmpExistente('');
-    setAsignarError('');
-    setAsignarModalOpen(true);
-  }
-
-  function toggleSelectEmpExistente(id) {
-    setSelectedEmpIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
-    );
-  }
-
-  async function handleGuardarAsignacion(e) {
-    e.preventDefault();
-    if (!sucursalSeleccionada) return;
-    if (selectedEmpIds.length === 0) {
-      setAsignarError('Selecciona al menos un empleado para asignar a esta sucursal.');
-      return;
-    }
-
-    setSavingAsignacion(true);
-    setAsignarError('');
-
-    try {
-      await Promise.all(
-        selectedEmpIds.map((id) =>
-          empleadosApi.setSucursal(id, sucursalSeleccionada.id_sucursal),
-        ),
-      );
-
-      setSuccess(
-        `Se ${selectedEmpIds.length === 1 ? 'asignó 1 empleado' : `asignaron ${selectedEmpIds.length} empleados`} a la sucursal ${sucursalSeleccionada.nombre}.`,
-      );
-      setAsignarModalOpen(false);
-      await loadEmpleados();
-      await loadSucursales();
-    } catch (err) {
-      setAsignarError(err.message || 'Error al asignar empleados a la sucursal');
-    } finally {
-      setSavingAsignacion(false);
-    }
-  }
 
   function abrirModalNuevoEmpleado() {
     setEditingEmpleado(null);
@@ -404,18 +336,6 @@ export default function SucursalesPage() {
   function updateField(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
     setFieldErrors((current) => ({ ...current, [field]: undefined }));
-  }
-
-  function toggleEmpleadoSelection(idEmpleado) {
-    const id = Number(idEmpleado);
-    setForm((current) => {
-      const selected = current.empleados_ids || [];
-      const exists = selected.includes(id);
-      return {
-        ...current,
-        empleados_ids: exists ? selected.filter((item) => item !== id) : [...selected, id],
-      };
-    });
   }
 
   async function handleSubmit(event) {
@@ -714,14 +634,6 @@ export default function SucursalesPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={abrirModalAsignarExistente}
-              >
-                <UserCheck className="h-4 w-4" />
-                Asignar empleado registrado
-              </Button>
               <Button size="sm" onClick={abrirModalNuevoEmpleado}>
                 <UserPlus className="h-4 w-4" />
                 Nuevo empleado
@@ -734,7 +646,7 @@ export default function SucursalesPage() {
               <div className="rounded-xl border border-dashed border-line p-6 text-center text-sm text-muted">
                 <Users className="mx-auto h-8 w-8 text-muted/60 mb-2" />
                 <p className="font-semibold text-ink">No hay empleados asignados a esta sucursal</p>
-                <p className="mt-1 text-xs">Usa "Asignar empleado registrado" para vincular personal existente o "Nuevo empleado" para dar de alta nuevo personal.</p>
+                <p className="mt-1 text-xs">Usa "Nuevo empleado" para dar de alta nuevo personal en esta sucursal.</p>
               </div>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -990,58 +902,6 @@ export default function SucursalesPage() {
               required
             />
           </Field>
-
-          {!editing && (
-            <div className="space-y-2 rounded-xl border border-line bg-sand/30 p-3.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-ink">
-                  Asignar empleados a esta sucursal (opcional)
-                </span>
-                <span className="text-[11px] text-muted">
-                  {(form.empleados_ids || []).length} seleccionados
-                </span>
-              </div>
-              <p className="text-[11px] text-muted">
-                Los empleados marcados serán transferidos y asignados a esta nueva sucursal al momento de crearla.
-              </p>
-
-              <div className="max-h-40 overflow-y-auto space-y-1 pr-1">
-                {listaEmpleados.length > 0 ? (
-                  listaEmpleados.map((emp) => {
-                    const isSelected = (form.empleados_ids || []).includes(emp.id_empleado);
-                    return (
-                      <label
-                        key={emp.id_empleado}
-                        className={cn(
-                          'flex items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-xs cursor-pointer border transition',
-                          isSelected
-                            ? 'border-forest/40 bg-forest/10 font-semibold text-forest'
-                            : 'border-transparent bg-paper hover:bg-sand/60 text-ink',
-                        )}
-                      >
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleEmpleadoSelection(emp.id_empleado)}
-                            className="rounded border-line text-forest focus:ring-forest h-3.5 w-3.5"
-                          />
-                          <span>
-                            {emp.nombre} {emp.apellido_paterno}
-                          </span>
-                        </div>
-                        <span className="text-[11px] text-muted">
-                          {formatRole(emp.rol)} {emp.sucursal ? `(${emp.sucursal})` : ''}
-                        </span>
-                      </label>
-                    );
-                  })
-                ) : (
-                  <p className="text-center py-2 text-xs text-muted">No hay empleados disponibles para asignar.</p>
-                )}
-              </div>
-            </div>
-          )}
         </form>
       </Modal>
 
@@ -1109,7 +969,7 @@ export default function SucursalesPage() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Apellido materno (opcional)" htmlFor="emp-apellido-materno">
+            <Field label="Apellido materno" htmlFor="emp-apellido-materno">
               <input
                 id="emp-apellido-materno"
                 type="text"
@@ -1237,96 +1097,6 @@ export default function SucursalesPage() {
             </Field>
           )}
         </form>
-      </Modal>
-
-      {/* Modal para asignar empleados registrados a la sucursal actual */}
-      <Modal
-        open={asignarModalOpen}
-        onClose={() => !savingAsignacion && setAsignarModalOpen(false)}
-        title={`Asignar empleados a ${sucursalSeleccionada?.nombre || ''}`}
-        description="Selecciona los empleados ya registrados en el sistema para asignarlos o transferirlos a este punto de venta."
-        footer={
-          <>
-            <Button
-              variant="secondary"
-              onClick={() => setAsignarModalOpen(false)}
-              disabled={savingAsignacion}
-            >
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleGuardarAsignacion}
-              loading={savingAsignacion}
-              disabled={selectedEmpIds.length === 0}
-            >
-              Asignar seleccionados ({selectedEmpIds.length})
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          {asignarError && <Alert>{asignarError}</Alert>}
-
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted h-4 w-4" />
-            <input
-              type="text"
-              placeholder="Buscar por nombre, rol o sucursal actual..."
-              value={searchEmpExistente}
-              onChange={(e) => setSearchEmpExistente(e.target.value)}
-              className={cn(inputClass(), 'pl-9 text-sm')}
-            />
-          </div>
-
-          <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
-            {empleadosDisponiblesParaAsignar.length === 0 ? (
-              <div className="py-8 text-center text-sm text-muted">
-                {listaEmpleados.filter((e) => Number(e.id_sucursal) !== Number(sucursalSeleccionada?.id_sucursal)).length === 0
-                  ? 'Todos los empleados registrados ya están asignados a esta sucursal.'
-                  : 'No se encontraron empleados que coincidan con la búsqueda.'}
-              </div>
-            ) : (
-              empleadosDisponiblesParaAsignar.map((emp) => {
-                const isSelected = selectedEmpIds.includes(emp.id_empleado);
-                const activo = emp.estado === 'activo';
-                return (
-                  <label
-                    key={emp.id_empleado}
-                    className={cn(
-                      'flex items-center justify-between gap-3 rounded-xl p-3 border cursor-pointer transition select-none',
-                      isSelected
-                        ? 'border-forest/50 bg-forest/10 text-forest'
-                        : 'border-line/70 bg-paper hover:bg-sand/30 text-ink',
-                    )}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleSelectEmpExistente(emp.id_empleado)}
-                        className="rounded border-line text-forest focus:ring-forest h-4 w-4 shrink-0"
-                      />
-                      <div className="min-w-0">
-                        <p className="font-semibold text-sm truncate">
-                          {emp.nombre} {emp.apellido_paterno} {emp.apellido_materno || ''}
-                        </p>
-                        <p className="text-xs text-muted truncate">{emp.correo} · {emp.telefono}</p>
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0 space-y-0.5">
-                      <span className="inline-block text-[11px] font-medium bg-sand px-2 py-0.5 rounded text-clay">
-                        {formatRole(emp.rol)}
-                      </span>
-                      <p className="text-[10px] text-muted truncate max-w-[140px]">
-                        Actual: <strong>{emp.sucursal || 'Sin sucursal'}</strong>
-                      </p>
-                    </div>
-                  </label>
-                );
-              })
-            )}
-          </div>
-        </div>
       </Modal>
 
       {/* Confirmación para desactivar empleado */}

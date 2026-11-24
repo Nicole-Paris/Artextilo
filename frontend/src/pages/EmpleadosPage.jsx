@@ -27,6 +27,7 @@ import { cn } from '../lib/cn.js';
 const EMPTY_FORM = {
   nombre: '',
   apellido_paterno: '',
+  apellido_materno: '',
   correo: '',
   telefono: '',
   contrasena: '',
@@ -39,6 +40,7 @@ function formFromEmpleado(empleado) {
   return {
     nombre: empleado.nombre ?? '',
     apellido_paterno: empleado.apellido_paterno ?? '',
+    apellido_materno: empleado.apellido_materno ?? '',
     correo: empleado.correo ?? '',
     telefono: empleado.telefono ?? '',
     contrasena: '',
@@ -49,7 +51,7 @@ function formFromEmpleado(empleado) {
 }
 
 function fullName(empleado) {
-  return [empleado.nombre, empleado.apellido_paterno]
+  return [empleado.nombre, empleado.apellido_paterno, empleado.apellido_materno]
     .filter(Boolean)
     .join(' ');
 }
@@ -77,6 +79,10 @@ function validateForm(form, { editing }) {
     errors.apellido_paterno = 'El apellido paterno es obligatorio';
   } else if (form.apellido_paterno.trim().length > 45) {
     errors.apellido_paterno = 'El apellido paterno no puede exceder 45 caracteres';
+  }
+
+  if (form.apellido_materno && form.apellido_materno.trim().length > 45) {
+    errors.apellido_materno = 'El apellido materno no puede exceder 45 caracteres';
   }
 
   const correo = form.correo.trim();
@@ -251,6 +257,7 @@ export default function EmpleadosPage() {
     !editing ||
     form.nombre !== initialForm.nombre ||
     form.apellido_paterno !== initialForm.apellido_paterno ||
+    form.apellido_materno !== initialForm.apellido_materno ||
     form.correo !== initialForm.correo ||
     form.telefono !== initialForm.telefono ||
     form.id_rol !== initialForm.id_rol ||
@@ -271,7 +278,14 @@ export default function EmpleadosPage() {
     setFieldErrors({});
     setFormError('');
 
-    const payload = { ...form };
+    const payload = {
+      ...form,
+      nombre: form.nombre.trim(),
+      apellido_paterno: form.apellido_paterno.trim(),
+      apellido_materno: form.apellido_materno?.trim() || null,
+      correo: form.correo.trim().toLowerCase(),
+      telefono: form.telefono.trim(),
+    };
     if (editing && !payload.contrasena) delete payload.contrasena;
 
     try {
@@ -640,6 +654,25 @@ export default function EmpleadosPage() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label="Apellido materno"
+              htmlFor="empleado-apellido-materno"
+              error={visibleFieldErrors.apellido_materno}
+            >
+              <input
+                id="empleado-apellido-materno"
+                data-field="apellido_materno"
+                type="text"
+                value={form.apellido_materno}
+                onChange={(event) => updateField('apellido_materno', event.target.value)}
+                onBlur={() => markTouched('apellido_materno')}
+                className={inputClass(visibleFieldErrors.apellido_materno)}
+                maxLength={45}
+                autoComplete="additional-name"
+                placeholder="Apellido materno"
+              />
+            </Field>
+
             <Field
               label="Correo"
               htmlFor="empleado-correo"

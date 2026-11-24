@@ -36,7 +36,6 @@ export const sucursalPayloadSchema = z.object({
     .trim()
     .min(1, 'El horario es obligatorio')
     .max(100, 'El horario no puede exceder 100 caracteres'),
-  empleados_ids: z.array(z.coerce.number().int().positive()).optional().default([]),
 });
 
 export const sucursalIdSchema = z.coerce

@@ -156,9 +156,10 @@ async function getClienteActivo(connection, id_cliente) {
 
 async function getEmpleadoActivo(connection, id_empleado) {
   const [rows] = await connection.execute(
-    `SELECT id_empleado, id_sucursal, estado
-     FROM empleado
-     WHERE id_empleado = ? AND deleted_at IS NULL
+    `SELECT e.id_empleado, e.id_sucursal, e.estado, r.nombre AS rol
+     FROM empleado e
+     INNER JOIN rol r ON r.id_rol = e.id_rol
+     WHERE e.id_empleado = ? AND e.deleted_at IS NULL
      LIMIT 1`,
     [id_empleado],
   );
@@ -209,7 +210,7 @@ async function getGlobalNumber(connection, nombre, fallback) {
   return Number.isFinite(value) ? value : fallback;
 }
 
-async function findOpenCorteId(connection, id_empleado, id_sucursal = null) {
+async function findOpenCorteId(connection, id_empleado) {
   const [rows] = await connection.execute(
     `SELECT id_corte_caja
      FROM corte_caja
@@ -220,28 +221,15 @@ async function findOpenCorteId(connection, id_empleado, id_sucursal = null) {
   );
 
   if (rows.length > 0) return rows[0].id_corte_caja;
-
-  if (id_sucursal) {
-    const [sucursalRows] = await connection.execute(
-      `SELECT id_corte_caja
-       FROM corte_caja
-       WHERE id_sucursal = ? AND estado = 'abierto' AND deleted_at IS NULL
-       ORDER BY fecha_apertura DESC
-       LIMIT 1`,
-      [id_sucursal],
-    );
-    if (sucursalRows.length > 0) return sucursalRows[0].id_corte_caja;
-  }
-
   return null;
 }
 
-async function getOpenCorteId(connection, id_empleado, id_sucursal = null) {
-  const idCorteCaja = await findOpenCorteId(connection, id_empleado, id_sucursal);
+async function getOpenCorteId(connection, id_empleado) {
+  const idCorteCaja = await findOpenCorteId(connection, id_empleado);
 
   if (!idCorteCaja) {
     throw ApiError.conflict(
-      'No hay una caja abierta para registrar el pago en esta sucursal. Abre una caja antes de registrar el pago.',
+      'El empleado no tiene un turno de caja abierto asignado. Debe esperar a que un supervisor o administrador le asigne y abra una caja.',
     );
   }
 
@@ -851,7 +839,7 @@ export async function createPedido(payload, userId = null) {
         );
       }
 
-      const idCorteCaja = await getOpenCorteId(connection, idEmpleadoPago, id_sucursal);
+      const idCorteCaja = await getOpenCorteId(connection, idEmpleadoPago);
       const concepto = es_venta_directa
         ? 'liquidacion'
         : montoInicial >= total
@@ -980,7 +968,7 @@ export async function addPago(id, payload, userId = null) {
       );
     }
 
-    const idCorteCaja = await getOpenCorteId(connection, idEmpleadoPago, pedido.id_sucursal);
+    const idCorteCaja = await getOpenCorteId(connection, idEmpleadoPago);
     await connection.execute(
       `INSERT INTO pago (
          id_pedido,
@@ -1219,9 +1207,15 @@ export async function cancelPedido(id, payload, userId = null) {
 
     if (montoDevolucion > 0) {
       const idEmpleadoAutoriza = Number(
-        payload.id_empleado_autoriza || idEmpleadoCancela,
+        payload.id_empleado_autoriza || userId || idEmpleadoCancela,
       );
-      await getEmpleadoActivo(connection, idEmpleadoAutoriza);
+      const actorAutoriza = await getEmpleadoActivo(connection, idEmpleadoAutoriza);
+      const rolAutoriza = String(actorAutoriza.rol || '').trim().toLowerCase();
+      if (!['administrador', 'supervisor', 'gerente'].includes(rolAutoriza)) {
+        throw ApiError.forbidden(
+          'Solo un administrador o supervisor puede autorizar devoluciones de dinero al cancelar pedidos',
+        );
+      }
 
       let idCorteCaja = null;
       if (payload.metodo_devolucion === 'efectivo') {

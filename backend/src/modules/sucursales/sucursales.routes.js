@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requireRole } from '../../middlewares/authMiddleware.js';
 import {
   dependencies,
   destroy,
@@ -12,11 +13,13 @@ import {
 const router = Router();
 
 router.get('/', index);
-router.get('/:id/dependencies', dependencies);
-router.post('/:id/restore', restore);
 router.get('/:id', show);
-router.post('/', store);
-router.put('/:id', update);
-router.delete('/:id', destroy);
+
+// Solo administrador puede gestionar sucursales
+router.get('/:id/dependencies', requireRole('administrador'), dependencies);
+router.post('/:id/restore', requireRole('administrador'), restore);
+router.post('/', requireRole('administrador'), store);
+router.put('/:id', requireRole('administrador'), update);
+router.delete('/:id', requireRole('administrador'), destroy);
 
 export default router;

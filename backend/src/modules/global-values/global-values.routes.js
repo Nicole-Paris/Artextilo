@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requireRole } from '../../middlewares/authMiddleware.js';
 
 import {
   create,
@@ -11,14 +12,14 @@ import {
 
 const router = Router();
 
-// Logotipo de la empresa
+// Lectura de logo y valores globales permitida
 router.get('/logo', getLogoHandler);
-router.put('/logo', updateLogoHandler);
-
-// Catálogo de valores globales
 router.get('/', index);
-router.post('/', create);
 router.get('/:id', show);
-router.put('/:id', update);
+
+// Modificaciones solo administrador
+router.put('/logo', requireRole('administrador'), updateLogoHandler);
+router.post('/', requireRole('administrador'), create);
+router.put('/:id', requireRole('administrador'), update);
 
 export default router;

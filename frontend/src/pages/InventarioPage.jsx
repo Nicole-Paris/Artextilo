@@ -22,6 +22,7 @@ import { inventarioApi } from '../api/inventario.js';
 import { productosApi } from '../api/productos.js';
 import { sucursalesApi } from '../api/sucursales.js';
 import { categoriasApi } from '../api/categorias.js';
+import { isAdmin } from '../lib/roles.js';
 
 const MOTIVOS_ENTRADA = [
   'Recepción de taller / maquila',
@@ -52,6 +53,15 @@ function getSucursalSesion() {
 }
 
 export default function InventarioPage() {
+  const empleadoActual = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem('artextilo_empleado') || '{}');
+    } catch {
+      return {};
+    }
+  }, []);
+  const isAdminUser = isAdmin(empleadoActual);
+
   const [activeTab, setActiveTab] = useState('existencias');
 
   const [inventario, setInventario] = useState([]);
@@ -178,12 +188,13 @@ export default function InventarioPage() {
     : inventario;
 
   const handleOpenMovimiento = (item, defaultTipo = 'entrada') => {
+    const finalTipo = !isAdminUser ? 'entrada' : defaultTipo;
     setSelectedItemForMovimiento(item);
     setFormMovimiento({
       id_inventario: item.id_inventario,
-      tipo: defaultTipo,
+      tipo: finalTipo,
       cantidad: 1,
-      motivo: defaultTipo === 'entrada' ? MOTIVOS_ENTRADA[0] : MOTIVOS_SALIDA[0],
+      motivo: finalTipo === 'entrada' ? MOTIVOS_ENTRADA[0] : MOTIVOS_SALIDA[0],
     });
     setModalMovimientoOpen(true);
   };
@@ -501,15 +512,17 @@ export default function InventarioPage() {
                             <ArrowUpRight className="h-3.5 w-3.5" />
                             Entrada
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenMovimiento(item, 'salida')}
-                            disabled={item.stock_actual <= 0}
-                            className="inline-flex items-center gap-1 rounded-lg border border-danger/30 bg-danger/10 px-2.5 py-1 text-xs font-semibold text-danger hover:bg-danger hover:text-white transition disabled:opacity-40 disabled:cursor-not-allowed"
-                          >
-                            <ArrowDownRight className="h-3.5 w-3.5" />
-                            Salida
-                          </button>
+                          {isAdminUser && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenMovimiento(item, 'salida')}
+                              disabled={item.stock_actual <= 0}
+                              className="inline-flex items-center gap-1 rounded-lg border border-danger/30 bg-danger/10 px-2.5 py-1 text-xs font-semibold text-danger hover:bg-danger hover:text-white transition disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              <ArrowDownRight className="h-3.5 w-3.5" />
+                              Salida
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -662,7 +675,7 @@ export default function InventarioPage() {
             <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
               Tipo de Movimiento *
             </label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className={`grid ${isAdminUser ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
               <button
                 type="button"
                 onClick={() =>
@@ -680,23 +693,25 @@ export default function InventarioPage() {
               >
                 <ArrowUpRight className="h-4 w-4" /> Entrada (+)
               </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setFormMovimiento((prev) => ({
-                    ...prev,
-                    tipo: 'salida',
-                    motivo: MOTIVOS_SALIDA[0],
-                  }))
-                }
-                className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold transition ${
-                  formMovimiento.tipo === 'salida'
-                    ? 'bg-danger text-white shadow-sm'
-                    : 'border border-line bg-white text-muted hover:bg-sand'
-                }`}
-              >
-                <ArrowDownRight className="h-4 w-4" /> Salida (-)
-              </button>
+              {isAdminUser && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFormMovimiento((prev) => ({
+                      ...prev,
+                      tipo: 'salida',
+                      motivo: MOTIVOS_SALIDA[0],
+                    }))
+                  }
+                  className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold transition ${
+                    formMovimiento.tipo === 'salida'
+                      ? 'bg-danger text-white shadow-sm'
+                      : 'border border-line bg-white text-muted hover:bg-sand'
+                  }`}
+                >
+                  <ArrowDownRight className="h-4 w-4" /> Salida (-)
+                </button>
+              )}
             </div>
           </div>
 

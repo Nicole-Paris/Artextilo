@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requireRole } from '../../middlewares/authMiddleware.js';
 import {
   destroy,
   index,
@@ -11,6 +12,9 @@ import {
 } from './empleados.controller.js';
 
 const router = Router();
+
+// Solo el administrador puede gestionar empleados
+router.use(requireRole('administrador'));
 
 router.get('/', index);
 router.post('/:id/restore', restore);
