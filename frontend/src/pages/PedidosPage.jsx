@@ -1390,7 +1390,7 @@ export default function PedidosPage() {
   const puedeCancelar = (pedido) =>
     !['cancelado', 'entregado'].includes(pedido.estado);
   const puedeDevolver = (pedido) =>
-    canDevoluciones && pedido.estado !== 'cancelado';
+    canDevoluciones && pedido.estado === 'pendiente';
 
   const abrirDevolucion = (pedido) => {
     cerrarDetalle();

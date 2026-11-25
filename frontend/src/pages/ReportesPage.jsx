@@ -62,9 +62,9 @@ function getPresetDates(preset) {
     };
   }
 
-  if (preset === '30dias') {
+  if (preset === '1anio') {
     const past = new Date(now);
-    past.setDate(now.getDate() - 30);
+    past.setFullYear(now.getFullYear() - 1);
     return {
       inicio: past.toISOString().split('T')[0],
       fin: todayStr,
@@ -236,6 +236,51 @@ export default function ReportesPage() {
     return Math.max(...data.ventas_por_dia.map((d) => d.total_dia), 1);
   }, [data]);
 
+  const topProductosChart = useMemo(() => {
+    const productos = data?.top_productos || [];
+    const total = productos.reduce(
+      (sum, producto) => sum + Number(producto.total_unidades || 0),
+      0,
+    );
+
+    if (total <= 0) {
+      return { gradient: 'conic-gradient(#E5E5E5 0 100%)', items: [], total: 0 };
+    }
+
+    const colors = [
+      '#AF9241',
+      '#766E65',
+      '#C8B77A',
+      '#3F4A43',
+      '#B66D50',
+      '#8A9A92',
+      '#D4A65D',
+      '#6E7F91',
+      '#A17C95',
+      '#7D8F55',
+    ];
+
+    let accumulated = 0;
+    const segments = productos.map((producto, index) => {
+      const value = Number(producto.total_unidades || 0);
+      const start = accumulated;
+      accumulated += (value / total) * 100;
+
+      return {
+        ...producto,
+        color: colors[index % colors.length],
+        percentage: total > 0 ? (value / total) * 100 : 0,
+        segment: `${colors[index % colors.length]} ${start}% ${accumulated}%`,
+      };
+    });
+
+    return {
+      gradient: `conic-gradient(${segments.map((item) => item.segment).join(', ')})`,
+      items: segments,
+      total,
+    };
+  }, [data]);
+
   return (
     <div className="space-y-6">
       {/* CABECERA (NO IMPRIMIBLE EN PAPEL) */}
@@ -320,7 +365,7 @@ export default function ReportesPage() {
               { id: 'hoy', label: 'Hoy' },
               { id: 'semana', label: 'Esta semana' },
               { id: 'mes', label: 'Este mes' },
-              { id: '30dias', label: 'Últimos 30 días' },
+              { id: '1anio', label: 'Último año' },
               { id: 'todos', label: 'Todo el historial' },
             ].map((p) => (
               <button
@@ -653,6 +698,59 @@ export default function ReportesPage() {
               Prendas y artículos con mayor rotación e ingresos generados
             </p>
           </div>
+
+          {topProductosChart.items.length > 0 ? (
+            <div className="mt-5 grid items-center gap-6 rounded-2xl border border-line/70 bg-sand/30 p-5 md:grid-cols-[240px_1fr]">
+              <div className="flex justify-center">
+                <div
+                  className="relative h-52 w-52 rounded-full shadow-soft"
+                  style={{ background: topProductosChart.gradient }}
+                  role="img"
+                  aria-label={`Gráfica de pastel de los productos más vendidos. Total: ${topProductosChart.total} unidades.`}
+                >
+                  <div className="absolute inset-[24%] flex flex-col items-center justify-center rounded-full bg-paper text-center shadow-soft">
+                    <span className="font-display text-2xl font-bold text-ink">
+                      {topProductosChart.total}
+                    </span>
+                    <span className="text-[0.65rem] font-bold uppercase tracking-wider text-muted">
+                      unidades
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                {topProductosChart.items.map((producto, index) => (
+                  <div
+                    key={producto.id_producto}
+                    className="flex items-center gap-3 rounded-xl border border-line/60 bg-paper px-3 py-2.5"
+                  >
+                    <span
+                      className="h-3 w-3 shrink-0 rounded-full"
+                      style={{ backgroundColor: producto.color }}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-semibold text-ink" title={producto.nombre}>
+                        {index + 1}. {producto.nombre}
+                      </p>
+                      <p className="text-[0.68rem] text-muted">
+                        {producto.total_unidades} pzas
+                      </p>
+                    </div>
+                    <span className="text-xs font-bold text-clay">
+                      {producto.percentage.toFixed(1)}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="mt-5 rounded-2xl border border-line/70 bg-sand/30 py-10 text-center">
+              <p className="text-xs text-muted">
+                No hay datos suficientes para mostrar la gráfica de productos.
+              </p>
+            </div>
+          )}
 
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-left text-sm">

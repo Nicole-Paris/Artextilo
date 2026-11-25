@@ -158,7 +158,7 @@ export default function DevolucionesPage({ embedded = false }) {
     let active = true;
     setPedidoOptionsLoading(true);
     pedidosApi
-      .list({ search: debouncedPedidoSearch.trim() })
+      .list({ search: debouncedPedidoSearch.trim(), estado: 'pendiente' })
       .then((response) => {
         if (active) setPedidoOptions((response.data || []).slice(0, 8));
       })
@@ -211,6 +211,12 @@ export default function DevolucionesPage({ embedded = false }) {
       .then((response) => {
         if (!active || !response.data) return;
         const ped = response.data;
+        if (ped.estado !== 'pendiente') {
+          setFormError('Solo se pueden registrar devoluciones para pedidos en estado pendiente.');
+          setSelectedPedido(null);
+          setCreateOpen(true);
+          return;
+        }
         const empleadoInicial = empleados[0]
           ? String(empleados[0].id_empleado)
           : '';
@@ -263,7 +269,11 @@ export default function DevolucionesPage({ embedded = false }) {
 
   const fieldErrors = useMemo(
     () => ({
-      pedido: selectedPedido ? '' : 'Selecciona un pedido.',
+      pedido: !selectedPedido
+        ? 'Selecciona un pedido.'
+        : selectedPedido.estado !== 'pendiente'
+          ? 'Solo se permiten devoluciones de pedidos pendientes.'
+          : '',
       monto:
         form.monto === ''
           ? 'El monto es obligatorio.'

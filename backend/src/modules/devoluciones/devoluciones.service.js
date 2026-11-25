@@ -202,6 +202,11 @@ export async function getResumenDevolucionPedido(idPedido) {
   if (rows.length === 0) {
     throw ApiError.notFound('Pedido no encontrado');
   }
+  if (rows[0].estado !== 'pendiente') {
+    throw ApiError.conflict(
+      'Solo se pueden registrar devoluciones para pedidos en estado pendiente.',
+    );
+  }
 
   const totalPagado = Number(rows[0].total_pagado);
   const totalDevuelto = Number(rows[0].total_devuelto);
@@ -223,7 +228,7 @@ export async function createDevolucion(payload, userId = null) {
     await connection.beginTransaction();
 
     const [pedidos] = await connection.execute(
-      `SELECT id_pedido, id_sucursal
+      `SELECT id_pedido, id_sucursal, estado
        FROM pedido
        WHERE id_pedido = ? AND deleted_at IS NULL
        FOR UPDATE`,
@@ -235,6 +240,12 @@ export async function createDevolucion(payload, userId = null) {
     }
 
     const pedido = pedidos[0];
+    if (pedido.estado !== 'pendiente') {
+      throw ApiError.conflict(
+        'Solo se pueden registrar devoluciones para pedidos en estado pendiente.',
+      );
+    }
+
     const totales = await getTotalesPedido(connection, payload.id_pedido);
     const totalPagado = totales.total_pagado;
     const totalDevuelto = totales.total_devuelto;
